@@ -158,6 +158,42 @@
     font-weight: 900;
     line-height: 20px;
   }
+  .count-badge {
+    position: absolute;
+    top: 8px; left: 10px;
+    min-width: 24px;
+    height: 20px;
+    padding: 0 5px;
+    border-radius: 10px;
+    background: #4ade80;
+    color: #0a0518;
+    font-size: 12px;
+    font-weight: 900;
+    line-height: 20px;
+    text-align: center;
+  }
+  .boss-card.team-enemy .count-badge {
+    background: #ff5050;
+    color: #fff;
+  }
+  .minus-btn {
+    display: inline-block;
+    margin-top: 8px;
+    margin-left: 6px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 13px;
+    font-weight: 700;
+    font-family: inherit;
+    border: 1px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+  }
+  .minus-btn:disabled {
+    opacity: 0.3;
+    cursor: not-allowed;
+  }
   .boss-card .swatch {
     width: 56px; height: 56px;
     border-radius: 50%;
@@ -241,42 +277,52 @@
 <div id="canvas-wrap">
   <canvas id="game" width="1280" height="720"></canvas>
   <div id="boss-select">
-    <h2>도전할 보스를 선택하세요 (여러 명 동시 선택 가능)</h2>
+    <h2>도전할 보스를 선택하세요 (같은 보스를 여러 번 선택 가능)</h2>
     <div class="cards">
       <div class="boss-card" role="button" tabindex="0" data-boss="magolor" data-index="0">
+        <div class="count-badge" data-count-badge="0" style="display:none;">x0</div>
         <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #4b0082, #9370db);"></div>
         <div class="name">MAGOLOR<br>마골로어</div>
         <div class="desc">균형 잡힌 마법사<br>순간이동 + 유도탄</div>
         <button class="team-toggle" type="button" data-team-index="0">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="0" title="한 명 빼기">−</button>
       </div>
       <div class="boss-card" role="button" tabindex="0" data-boss="marx" data-index="1">
+        <div class="count-badge" data-count-badge="1" style="display:none;">x0</div>
         <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #ff1478, #ff69b4);"></div>
         <div class="name">MARX<br>마르크</div>
         <div class="desc">빠르고 변칙적인 광대<br>순간이동 + 저격탄</div>
         <button class="team-toggle" type="button" data-team-index="1">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="1" title="한 명 빼기">−</button>
       </div>
       <div class="boss-card" role="button" tabindex="0" data-boss="dedede" data-index="2">
+        <div class="count-badge" data-count-badge="2" style="display:none;">x0</div>
         <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #1e3c96, #4169e1);"></div>
         <div class="name">KING DEDEDE<br>디디디 대왕</div>
         <div class="desc">묵직한 몸집과 체력<br>망치 충격파 + 돌진</div>
         <button class="team-toggle" type="button" data-team-index="2">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="2" title="한 명 빼기">−</button>
       </div>
       <div class="boss-card" role="button" tabindex="0" data-boss="zangief" data-index="3">
+        <div class="count-badge" data-count-badge="3" style="display:none;">x0</div>
         <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #8b0000, #deb887);"></div>
         <div class="name">ZANGIEF<br>장기에프</div>
         <div class="desc">압도적인 근접 그래플러<br>잡기 돌진 + 강력한 근거리</div>
         <button class="team-toggle" type="button" data-team-index="3">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="3" title="한 명 빼기">−</button>
       </div>
       <div class="boss-card" role="button" tabindex="0" data-boss="liwancha" data-index="4">
+        <div class="count-badge" data-count-badge="4" style="display:none;">x0</div>
         <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #2a0505, #b0202c);"></div>
         <div class="name">LIWANCHA<br>리완차</div>
         <div class="desc">묵직한 차지 격투가<br>차지 돌진 + 기절 유발</div>
         <button class="team-toggle" type="button" data-team-index="4">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="4" title="한 명 빼기">−</button>
       </div>
     </div>
     <button id="start-battle-btn" disabled>전투 시작 (0명 선택됨)</button>
     <div id="spectator-row"><label><input type="checkbox" id="spectator-checkbox"> 관전 모드 (플레이어 없이 보스끼리 대결 관전)</label></div>
-    <div class="hint">카드를 클릭/터치해 원하는 보스를 여러 명 고르세요 · 방향키로 커서 이동, <span class="key">Z</span>로 선택/해제, <span class="key">Shift</span>로 팀 전환(적/아군), <span class="key">X</span>로 전투 시작</div>
+    <div class="hint">카드를 클릭/터치할 때마다 같은 보스를 최대 5명까지 반복 선택할 수 있어요(예: 마르크 5명) · <span class="key">−</span> 버튼이나 우클릭/Shift+클릭으로 한 명 빼기 · 방향키로 커서 이동, <span class="key">Z</span>로 한 명 추가, <span class="key">C</span>로 한 명 빼기, <span class="key">Shift</span>로 해당 보스의 팀 전환(적/아군, 이미 선택된 모든 인원에 적용), <span class="key">X</span>로 전투 시작</div>
   </div>
 </div>
 <div id="controls">
@@ -362,7 +408,7 @@ const keyMap = {
   ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
   KeyA: "left", KeyD: "right", KeyW: "up", KeyS: "down",
   ShiftLeft: "shift", ShiftRight: "shift",
-  KeyZ: "z", KeyX: "x", Escape: "escape"
+  KeyZ: "z", KeyX: "x", KeyC: "c", Escape: "escape"
 };
 window.addEventListener("keydown", (e) => {
   const k = keyMap[e.code];
@@ -1702,6 +1748,7 @@ const UI = {
 
 // ---------- Game ----------
 const BOSS_ORDER = ["magolor", "marx", "dedede", "zangief", "liwancha"];
+const MAX_PICKS_PER_BOSS = 5;
 
 class Game {
   constructor() {
@@ -1716,11 +1763,14 @@ class Game {
 
     this.state = "select";
     this.selectedIndex = 0;
-    // which boss indices are queued up for the next fight — multiple can be
-    // picked at once for a simultaneous multi-boss battle
-    this.selectedSet = new Set();
+    // how many instances of each boss index are queued up for the next fight
+    // (index -> count, 0..MAX_PICKS_PER_BOSS). The same boss type can be picked
+    // several times to spawn multiple independent instances of it in battle.
+    this.selectedCounts = new Map();
     // team ('ally' | 'enemy') for each selected boss index; defaults to 'enemy'
-    // (fights the player, as in the original single-team game) when unset
+    // (fights the player, as in the original single-team game) when unset.
+    // All instances of a given boss index share one team — flipping it flips
+    // every currently-picked copy of that boss type at once.
     this.selectedTeams = new Map();
     this.spectatorMode = false;
     this.hadAllies = false;
@@ -1737,42 +1787,55 @@ class Game {
       this.bg_stars.push([randInt(0, WIDTH), randInt(0, HEIGHT), randInt(1, 3)]);
     }
   }
-  toggleSelect(idx) {
-    if (this.selectedSet.has(idx)) this.selectedSet.delete(idx);
-    else this.selectedSet.add(idx);
+  incrementSelect(idx) {
+    const cur = this.selectedCounts.get(idx) || 0;
+    if (cur < MAX_PICKS_PER_BOSS) this.selectedCounts.set(idx, cur + 1);
+  }
+  decrementSelect(idx) {
+    const cur = this.selectedCounts.get(idx) || 0;
+    if (cur > 0) this.selectedCounts.set(idx, cur - 1);
   }
   toggleTeam(idx) {
     const current = this.selectedTeams.get(idx) || "enemy";
     this.selectedTeams.set(idx, current === "enemy" ? "ally" : "enemy");
   }
   startBattle() {
-    if (this.selectedSet.size === 0) return;
-    const chosen = BOSS_ORDER.map((_, i) => i).filter(i => this.selectedSet.has(i));
-    const allies = chosen.filter(idx => (this.selectedTeams.get(idx) || "enemy") === "ally");
-    const enemies = chosen.filter(idx => (this.selectedTeams.get(idx) || "enemy") !== "ally");
+    // flatten picks into one entry per instance (so the same boss type can
+    // appear several times), split by each type's assigned team
+    const allyPicks = [];
+    const enemyPicks = [];
+    BOSS_ORDER.forEach((_, idx) => {
+      const count = this.selectedCounts.get(idx) || 0;
+      if (count === 0) return;
+      const team = this.selectedTeams.get(idx) || "enemy";
+      const bucket = team === "ally" ? allyPicks : enemyPicks;
+      for (let k = 0; k < count; k++) bucket.push(idx);
+    });
+    if (allyPicks.length === 0 && enemyPicks.length === 0) return;
 
     const makeBoss = (idx, i, n, team) => {
       const boss = new Boss(BOSS_ORDER[idx], team);
       // spread multiple bosses out vertically (and stagger x a little) so
       // they don't all spawn stacked on top of each other. Allies spawn on
       // the left of the arena, enemies on the right, mirroring the player's
-      // own left-side starting position.
+      // own left-side starting position. Works fine for larger n too — bars
+      // just pack closer together vertically.
       boss.y = (HEIGHT * (i + 1)) / (n + 1);
       boss.target_y = boss.y;
       if (team === "ally") {
-        boss.x = 180 + (i % 2) * 140;
+        boss.x = 180 + (i % 3) * 110;
       } else {
-        boss.x = WIDTH - 180 - (i % 2) * 140;
+        boss.x = WIDTH - 180 - (i % 3) * 110;
       }
       boss.target_x = boss.x;
       return boss;
     };
 
     this.bosses = [
-      ...allies.map((idx, i) => makeBoss(idx, i, allies.length, "ally")),
-      ...enemies.map((idx, i) => makeBoss(idx, i, enemies.length, "enemy"))
+      ...allyPicks.map((idx, i) => makeBoss(idx, i, allyPicks.length, "ally")),
+      ...enemyPicks.map((idx, i) => makeBoss(idx, i, enemyPicks.length, "enemy"))
     ];
-    this.hadAllies = allies.length > 0;
+    this.hadAllies = allyPicks.length > 0;
     this.state = "intro";
     this.intro_timer = 180;
   }
@@ -1862,10 +1925,16 @@ class Game {
         this.selectedIndex = (this.selectedIndex + 1) % BOSS_ORDER.length;
         this.select_cooldown = 12;
       } else if (keys.z) {
-        this.toggleSelect(this.selectedIndex);
+        // add one more instance of the currently-cursored boss (up to the cap)
+        this.incrementSelect(this.selectedIndex);
+        this.select_cooldown = 14;
+      } else if (keys.c) {
+        // remove one instance of the currently-cursored boss
+        this.decrementSelect(this.selectedIndex);
         this.select_cooldown = 14;
       } else if (keys.shift) {
-        // flip the currently-cursored card between 적(enemy)/아군(ally)
+        // flip the currently-cursored card between 적(enemy)/아군(ally) —
+        // applies to every currently-picked instance of that boss type
         this.toggleTeam(this.selectedIndex);
         this.select_cooldown = 14;
       } else if (keys.x) {
@@ -2054,6 +2123,8 @@ function compact(arr, updateFn) {
 const bossSelectEl = document.getElementById("boss-select");
 const bossCards = Array.from(document.querySelectorAll(".boss-card"));
 const teamToggleBtns = Array.from(document.querySelectorAll(".team-toggle"));
+const minusBtns = Array.from(document.querySelectorAll(".minus-btn"));
+const countBadges = Array.from(document.querySelectorAll(".count-badge"));
 const startBattleBtn = document.getElementById("start-battle-btn");
 const spectatorCheckbox = document.getElementById("spectator-checkbox");
 
@@ -2061,11 +2132,23 @@ const spectatorCheckbox = document.getElementById("spectator-checkbox");
 let game = new Game();
 
 bossCards.forEach(card => {
-  card.addEventListener("click", () => {
+  card.addEventListener("click", (e) => {
     if (game.state !== "select") return;
     const idx = parseInt(card.dataset.index, 10);
     game.selectedIndex = idx;
-    game.toggleSelect(idx);
+    // Shift+click removes one instead of adding one, so a mouse user doesn't
+    // need the minus button or a right-click to correct a pick
+    if (e.shiftKey) game.decrementSelect(idx);
+    else game.incrementSelect(idx);
+  });
+  // right-click (desktop, no touch equivalent needed since the minus button
+  // covers touch) also removes one instance
+  card.addEventListener("contextmenu", (e) => {
+    if (game.state !== "select") return;
+    e.preventDefault();
+    const idx = parseInt(card.dataset.index, 10);
+    game.selectedIndex = idx;
+    game.decrementSelect(idx);
   });
   card.addEventListener("keydown", (e) => {
     if (game.state !== "select") return;
@@ -2073,7 +2156,7 @@ bossCards.forEach(card => {
       e.preventDefault();
       const idx = parseInt(card.dataset.index, 10);
       game.selectedIndex = idx;
-      game.toggleSelect(idx);
+      game.incrementSelect(idx);
     }
   });
 });
@@ -2083,6 +2166,14 @@ teamToggleBtns.forEach(btn => {
     if (game.state !== "select") return;
     const idx = parseInt(btn.dataset.teamIndex, 10);
     game.toggleTeam(idx);
+  });
+});
+minusBtns.forEach(btn => {
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (game.state !== "select") return;
+    const idx = parseInt(btn.dataset.minusIndex, 10);
+    game.decrementSelect(idx);
   });
 });
 startBattleBtn.addEventListener("click", () => {
@@ -2117,14 +2208,23 @@ function syncBossSelectUI() {
     lastSyncedIndex = game.selectedIndex;
   }
 
-  const pickedKey = BOSS_ORDER.map((_, i) => game.selectedSet.has(i) ? "1" : "0").join("");
+  const pickedKey = BOSS_ORDER.map((_, i) => game.selectedCounts.get(i) || 0).join(",");
   if (pickedKey !== lastSyncedPicked) {
+    let total = 0;
     bossCards.forEach((card, i) => {
-      card.classList.toggle("picked", game.selectedSet.has(i));
+      const count = game.selectedCounts.get(i) || 0;
+      total += count;
+      card.classList.toggle("picked", count > 0);
+      const badge = countBadges[i];
+      if (badge) {
+        badge.textContent = `x${count}`;
+        badge.style.display = count > 0 ? "block" : "none";
+      }
+      const minus = minusBtns[i];
+      if (minus) minus.disabled = count === 0;
     });
-    const n = game.selectedSet.size;
-    startBattleBtn.disabled = n === 0;
-    startBattleBtn.textContent = n === 0 ? "전투 시작 (0명 선택됨)" : `전투 시작 (${n}명 선택됨)`;
+    startBattleBtn.disabled = total === 0;
+    startBattleBtn.textContent = total === 0 ? "전투 시작 (0명 선택됨)" : `전투 시작 (${total}명 선택됨)`;
     lastSyncedPicked = pickedKey;
   }
 
