@@ -339,7 +339,7 @@
         <div class="count-badge" data-count-badge="7" style="display:none;">x0</div>
         <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #16163a, #8c3cdc);"></div>
         <div class="name">MASKED META KNIGHT<br>마스크 메타나이트</div>
-        <div class="desc">초고속 난무 검사<br>연속 순간 베기 + 검기</div>
+        <div class="desc">초고속 난무 검사<br>연속 순간 베기 + 검기<br><span style="color:#ffd966;">★ 마스크 디디디와 함께 선택 시<br>체력 공유 + 합동 공격 콤비!</span></div>
         <button class="team-toggle" type="button" data-team-index="7">적(ENEMY)</button>
         <button class="minus-btn" type="button" data-minus-index="7" title="한 명 빼기">−</button>
       </div>
@@ -347,7 +347,7 @@
         <div class="count-badge" data-count-badge="8" style="display:none;">x0</div>
         <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #190f2e, #aa0a0a);"></div>
         <div class="name">MASKED DEDEDE<br>마스크 디디디</div>
-        <div class="desc">오염된 대왕<br>강화 망치 + 돌진 태클</div>
+        <div class="desc">오염된 대왕<br>강화 망치 + 돌진 태클<br><span style="color:#ffd966;">★ 마스크 메타나이트와 함께 선택 시<br>체력 공유 + 합동 공격 콤비!</span></div>
         <button class="team-toggle" type="button" data-team-index="8">적(ENEMY)</button>
         <button class="minus-btn" type="button" data-minus-index="8" title="한 명 빼기">−</button>
       </div>
@@ -856,8 +856,15 @@ class Boss {
     const cfg = BOSS_CONFIGS[type] || BOSS_CONFIGS.magolor;
     this.name = cfg.name;
     this.x = WIDTH - 200; this.y = HEIGHT / 2;
-    this.max_health = cfg.max_health;
-    this.health = this.max_health;
+    // masked meta knight + masked dedede "combo duo": when both are spawned together
+    // in the same battle, startBattle() links them via a shared DuoState object
+    // ({team, health, max_health, revived, combo}) assigned here. The health/max_health
+    // accessors below transparently redirect reads/writes to it, so take_damage(),
+    // the phase-transition check and the dead-boss cleanup loop all keep working
+    // unmodified whether a boss is soloing or duo-linked.
+    this.duoState = null;
+    this._max_health = cfg.max_health;
+    this._health = this._max_health;
     this.phase = 1;
     this.pattern_timer = 0;
     this.pattern_index = 0;
@@ -908,6 +915,13 @@ class Boss {
     this.tackle_cooldown = 140;
     this.big_hammer_cooldown = 0;
   }
+  // health/max_health are accessor properties so a duo-linked boss transparently
+  // shares one pool with its partner (see this.duoState), while a solo boss just
+  // reads/writes its own backing fields exactly as before.
+  get health() { return this.duoState ? this.duoState.health : this._health; }
+  set health(v) { if (this.duoState) this.duoState.health = v; else this._health = v; }
+  get max_health() { return this.duoState ? this.duoState.max_health : this._max_health; }
+  set max_health(v) { if (this.duoState) this.duoState.max_health = v; else this._max_health = v; }
   pickTarget(player, allBosses) {
     // nearest opponent: for an 'enemy' boss that's the player or any 'ally' boss;
     // for an 'ally' boss that's any 'enemy' boss only.
@@ -963,6 +977,11 @@ class Boss {
     if (this.dmk_cooldown > 0) this.dmk_cooldown -= 1;
     if (this.tackle_cooldown > 0) this.tackle_cooldown -= 1;
     if (this.big_hammer_cooldown > 0) this.big_hammer_cooldown -= 1;
+    // duo-linked shared state (revival banner timer) only needs decrementing once
+    // per frame, so only the darkdedede half of the pair drives it
+    if (this.duoState && this.type === "darkdedede" && this.duoState.reviveTextTimer > 0) {
+      this.duoState.reviveTextTimer -= 1;
+    }
 
     const dy = this.target_y - this.y;
     this.y += dy * 0.05;
@@ -1014,9 +1033,16 @@ class Boss {
       else if (this.phase === 2) this.phase2_darkmeta(target, bullets, particles);
       else if (this.phase === 3) this.phase3_darkmeta(target, bullets, particles);
     } else if (this.type === "darkdedede") {
-      if (this.phase === 1) this.phase1_darkdedede(target, bullets, particles);
-      else if (this.phase === 2) this.phase2_darkdedede(target, bullets, particles);
-      else if (this.phase === 3) this.phase3_darkdedede(target, bullets, particles);
+      // the duo combo (Meta Knight's illusion clone, spat at the target by Dedede)
+      // is driven from the Dedede half of the pair; while it's telegraphing/flying
+      // Dedede holds off his own solo patterns so the combo reads as a distinct beat
+      this.updateDuoCombo(target, bullets, particles, allBosses);
+      const comboBusy = this.duoState && this.duoState.combo.state !== "idle";
+      if (!comboBusy) {
+        if (this.phase === 1) this.phase1_darkdedede(target, bullets, particles);
+        else if (this.phase === 2) this.phase2_darkdedede(target, bullets, particles);
+        else if (this.phase === 3) this.phase3_darkdedede(target, bullets, particles);
+      }
     }
 
     if (this.health <= Math.floor(this.max_health/3) * 2 && this.phase === 1) {
@@ -1827,6 +1853,77 @@ class Boss {
     }
   }
 
+  // ===== MASKED META KNIGHT + MASKED DEDEDE duo combo =====
+  // "합동 공격": Meta Knight conjures an illusory clone of himself (telegraph),
+  // hands it off to Dedede (transfer), who then hurls it at the target as a
+  // fast, high-damage gap-closer (launch). Only runs from the Dedede half of a
+  // duo-linked pair so the state machine only advances once per frame.
+  updateDuoCombo(target, bullets, particles, allBosses) {
+    const ds = this.duoState;
+    if (!ds) return;
+    const combo = ds.combo;
+    const partner = allBosses ? allBosses.find(b => b !== this && b.duoState === ds && b.type === "darkmeta") : null;
+    if (!partner) return; // safety: only fire the real combo when both halves are present
+
+    if (combo.state === "idle") {
+      if (combo.cooldown > 0) { combo.cooldown -= 1; return; }
+      if (this.phase_transition || partner.phase_transition) return;
+      if (this.dash_state === "dashing") return;
+      combo.state = "telegraph";
+      combo.timer = 75;
+    } else if (combo.state === "telegraph") {
+      combo.timer -= 1;
+      if (this.pattern_timer % 8 === 0) {
+        for (let i = 0; i < 3; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(partner.x, partner.y, DMK_PURPLE, randUniform(2, 5), angle, 20));
+        }
+      }
+      if (combo.timer <= 0) {
+        combo.state = "transfer";
+        combo.timer = 22;
+        combo.cloneX = partner.x; combo.cloneY = partner.y;
+      }
+    } else if (combo.state === "transfer") {
+      combo.timer -= 1;
+      const t = 1 - Math.max(0, combo.timer) / 22;
+      combo.cloneX = partner.x + (this.x - partner.x) * t;
+      combo.cloneY = partner.y + (this.y - partner.y) * t;
+      if (combo.timer <= 0) {
+        combo.state = "launch";
+        combo.cloneX = this.x; combo.cloneY = this.y;
+        const dx = target.x - combo.cloneX, dy = target.y - combo.cloneY;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 1;
+        combo.vx = (dx / dist) * 16;
+        combo.vy = (dy / dist) * 16;
+        this.shakeRequest = Math.max(this.shakeRequest, 15);
+        for (let i = 0; i < 20; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(this.x, this.y, DDD_RED, randUniform(3, 7), angle, 20));
+        }
+      }
+    } else if (combo.state === "launch") {
+      combo.cloneX += combo.vx;
+      combo.cloneY += combo.vy;
+      const dx = target.x - combo.cloneX, dy = target.y - combo.cloneY;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      const outOfBounds = combo.cloneX < -60 || combo.cloneX > WIDTH + 60 || combo.cloneY < -60 || combo.cloneY > HEIGHT + 60;
+      if (dist < 42) {
+        dealDamageTo(target, 20, particles);
+        for (let i = 0; i < 35; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(combo.cloneX, combo.cloneY, choice([DMK_PURPLE, DDD_RED, WHITE]), randUniform(4, 9), angle, 30));
+        }
+        this.shakeRequest = Math.max(this.shakeRequest, 25);
+        combo.state = "idle";
+        combo.cooldown = 480;
+      } else if (outOfBounds) {
+        combo.state = "idle";
+        combo.cooldown = 300;
+      }
+    }
+  }
+
   take_damage(damage, particles) {
     if (this.invincible === 0) {
       // heavily resistant while flashing through a phase transition —
@@ -1875,6 +1972,56 @@ class Boss {
       ctx.font = "26px sans-serif";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
       ctx.fillText(`PHASE ${this.phase}!`, x, y - 85);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    }
+
+    // duo-linked visuals: drawn once, from the darkdedede half, so the combo
+    // clone and banner text don't get painted twice per frame
+    if (this.type === "darkdedede" && this.duoState) {
+      this.draw_duoExtras(shake, ticks);
+    }
+  }
+  draw_duoExtras(shake, ticks) {
+    const ds = this.duoState;
+    const combo = ds.combo;
+    if (combo && combo.state !== "idle") {
+      // the illusion clone itself: a small silhouette flying from Meta Knight
+      // to Dedede (transfer) and then out toward the target (launch)
+      const cx = combo.cloneX + shake[0], cy = combo.cloneY + shake[1];
+      const spin = ticks * 0.02;
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(spin);
+      ctx.globalAlpha = combo.state === "launch" ? 0.95 : 0.6;
+      ctx.fillStyle = rgb(DMK_PURPLE);
+      ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgb(DMK_MASK);
+      ctx.beginPath(); ctx.ellipse(0, -2, 15, 11, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.restore();
+      if (combo.state === "launch") {
+        // short motion trail so the throw reads as fast
+        ctx.strokeStyle = rgb(DDD_GLOW, 0.5);
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.moveTo(cx - combo.vx * 2, cy - combo.vy * 2);
+        ctx.lineTo(cx, cy);
+        ctx.stroke();
+      }
+
+      const label = combo.state === "launch" ? "합동 공격!" : "합동 공격 준비!";
+      ctx.fillStyle = combo.state === "launch" ? rgb(RED) : rgb(YELLOW);
+      ctx.font = "bold 26px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(label, WIDTH / 2, 90);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    }
+
+    if (ds.reviveTextTimer > 0) {
+      const alpha = Math.min(1, ds.reviveTextTimer / 30);
+      ctx.fillStyle = `rgba(255,215,0,${alpha})`;
+      ctx.font = "bold 30px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("마이 토마토를 나눠 먹었다!", WIDTH / 2, 110);
       ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     }
   }
@@ -2312,6 +2459,18 @@ class Boss {
       }
     }
 
+    // duo combo telegraph: illusion clones swirl around Meta Knight while he
+    // conjures the copy that Dedede is about to throw
+    if (this.duoState && this.duoState.combo && this.duoState.combo.state === "telegraph") {
+      for (let i = 0; i < 3; i++) {
+        const orbitAngle = ticks * 0.012 + (i * Math.PI * 2) / 3;
+        const ox = x + Math.cos(orbitAngle) * (size + 30);
+        const oy = y + Math.sin(orbitAngle) * (size + 30);
+        ctx.fillStyle = rgb(DMK_PURPLE, 0.35);
+        ctx.beginPath(); ctx.arc(ox, oy, size * 0.5, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+
     ctx.fillStyle = rgb(DMK_PURPLE);
     ctx.beginPath();
     ctx.moveTo(x - size * 0.7, y + size * 0.3);
@@ -2355,6 +2514,12 @@ class Boss {
       ctx.strokeStyle = rgb(DDD_GLOW, 0.5 + 0.4 * Math.sin(ticks * 0.04));
       ctx.lineWidth = 6;
       ctx.beginPath(); ctx.arc(x, y, size + 24, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // duo combo wind-up: a mouth-glow while Dedede is holding/about to hurl the clone
+    if (this.duoState && this.duoState.combo && (this.duoState.combo.state === "transfer" || this.duoState.combo.state === "launch")) {
+      ctx.fillStyle = rgb(DDD_GLOW, 0.55 + 0.3 * Math.sin(ticks * 0.03));
+      ctx.beginPath(); ctx.arc(x, y + size * 0.35, size * 0.6, 0, Math.PI * 2); ctx.fill();
     }
 
     ctx.fillStyle = rgb(bodyColor);
@@ -2470,7 +2635,10 @@ const UI = {
     ctx.fillStyle = rgb(WHITE);
     ctx.font = "18px sans-serif";
     ctx.textBaseline = "alphabetic";
-    ctx.fillText(boss.name, x, y - 6);
+    // duo-linked bosses (e.g. masked meta knight + masked dedede) share one
+    // pool and are rendered as a single labeled bar covering both of them
+    const label = boss.duoState ? "마스크 메타나이트 & 마스크 디디디" : boss.name;
+    ctx.fillText(label, x, y - 6);
   },
   draw_charge(player) {
     const x = 30, y = HEIGHT - 100, bw = 200, bh = 15;
@@ -2592,9 +2760,36 @@ class Game {
       ...allyPicks.map((idx, i) => makeBoss(idx, i, allyPicks.length, "ally")),
       ...enemyPicks.map((idx, i) => makeBoss(idx, i, enemyPicks.length, "enemy"))
     ];
+    this.linkDuoBosses();
     this.hadAllies = allyPicks.length > 0;
     this.state = "intro";
     this.intro_timer = 180;
+  }
+  // masked meta knight + masked dedede combo duo: pair up one of each per team
+  // (supports the duplicate-pick system — e.g. 2x meta knight + 1x dedede on
+  // the same team pairs one of them, the extra meta knight stays solo) behind
+  // a shared DuoState object with its own 3200 HP pool, one-time revival flag
+  // and combo-attack state machine. A boss picked without its counterpart
+  // simply keeps its normal solo max_health/health — nothing else changes.
+  linkDuoBosses() {
+    const DUO_MAX_HEALTH = 3200;
+    for (const team of ["ally", "enemy"]) {
+      const metas = this.bosses.filter(b => b.type === "darkmeta" && b.team === team && !b.duoState);
+      const dededes = this.bosses.filter(b => b.type === "darkdedede" && b.team === team && !b.duoState);
+      const pairCount = Math.min(metas.length, dededes.length);
+      for (let i = 0; i < pairCount; i++) {
+        const duoState = {
+          team,
+          health: DUO_MAX_HEALTH,
+          max_health: DUO_MAX_HEALTH,
+          revived: false,
+          reviveTextTimer: 0,
+          combo: { state: "idle", timer: 0, cooldown: 240, cloneX: 0, cloneY: 0, vx: 0, vy: 0 }
+        };
+        metas[i].duoState = duoState;
+        dededes[i].duoState = duoState;
+      }
+    }
   }
   add_shake(intensity) { this.shake_duration = intensity; }
   update_shake() {
@@ -2740,6 +2935,37 @@ class Game {
 
       this.handle_collisions();
 
+      // duo revival check: a shared-pool pair (masked meta knight + masked dedede)
+      // gets exactly one "Maxim Tomato" save before the dead-boss cleanup below is
+      // allowed to actually remove them. Runs once per duoState per frame even
+      // though both halves are in this.bosses (they share the same object).
+      const processedDuo = new Set();
+      for (const b of this.bosses) {
+        const ds = b.duoState;
+        if (!ds || processedDuo.has(ds)) continue;
+        processedDuo.add(ds);
+        if (ds.health <= 0 && !ds.revived) {
+          ds.revived = true;
+          ds.health = Math.round(ds.max_health * 0.65);
+          ds.reviveTextTimer = 150;
+          let midX = 0, midY = 0, count = 0;
+          for (const partner of this.bosses) {
+            if (partner.duoState !== ds) continue;
+            partner.invincible = 90;
+            partner.flash = 40;
+            midX += partner.x; midY += partner.y; count += 1;
+          }
+          if (count > 0) { midX /= count; midY /= count; }
+          // big Maxim Tomato burst: a ring of red particles plus an explosion effect
+          for (let k = 0; k < 60; k++) {
+            const angle = randUniform(0, Math.PI * 2);
+            this.particles.push(new Particle(midX, midY, choice([RED, [255,90,90], WHITE]), randUniform(4, 11), angle, 45));
+          }
+          this.effects.push(new Effect(midX, midY, "explosion", 40));
+          this.add_shake(30);
+        }
+      }
+
       // clear out any boss that just died, with a fitting bang
       for (let i = this.bosses.length - 1; i >= 0; i--) {
         if (this.bosses[i].health <= 0) {
@@ -2830,6 +3056,8 @@ class Game {
       if (!this.spectatorMode) UI.draw_health(this.player);
       let leftRow = 0, rightRow = 0;
       for (const boss of this.bosses) {
+        // duo-linked pair shares one bar; skip the darkmeta half so it's only drawn once
+        if (boss.duoState && boss.type === "darkmeta") continue;
         if (boss.team === "ally") UI.draw_boss_health(boss, leftRow++, "left");
         else UI.draw_boss_health(boss, rightRow++, "right");
       }
