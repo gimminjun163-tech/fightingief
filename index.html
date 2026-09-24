@@ -1854,10 +1854,14 @@ class Boss {
   }
 
   // ===== MASKED META KNIGHT + MASKED DEDEDE duo combo =====
-  // "합동 공격": Meta Knight conjures an illusory clone of himself (telegraph),
-  // hands it off to Dedede (transfer), who then hurls it at the target as a
-  // fast, high-damage gap-closer (launch). Only runs from the Dedede half of a
-  // duo-linked pair so the state machine only advances once per frame.
+  // "합동 공격": Meta Knight conjures FOUR illusory clones of himself
+  // (telegraph -> clones_active), each of which dashes in and lands its own
+  // quick slash on the target. Once all four have struck, they converge and
+  // flash-merge back into a single clone (merge), which Meta Knight hands off
+  // to Dedede (transfer), who then hurls it at the target as a fast, high-
+  // damage gap-closer to finish the sequence (launch). Only runs from the
+  // Dedede half of a duo-linked pair so the state machine only advances once
+  // per frame.
   updateDuoCombo(target, bullets, particles, allBosses) {
     const ds = this.duoState;
     if (!ds) return;
@@ -1865,12 +1869,22 @@ class Boss {
     const partner = allBosses ? allBosses.find(b => b !== this && b.duoState === ds && b.type === "darkmeta") : null;
     if (!partner) return; // safety: only fire the real combo when both halves are present
 
+    const CLONE_COUNT = 4;
+    const CLONE_DELAY = 16;        // frames between each clone's dash starting
+    const CLONE_SPEED = 17;
+    const CLONE_HIT_RADIUS = 48;
+    const CLONE_MAX_DASH = 40;     // force a hit by this frame so the flurry never whiffs
+    const CLONE_RETURN_SPEED = 15;
+    const CLONE_DAMAGE = 5;
+    const MERGE_DURATION = 16;
+    const FINAL_THROW_DAMAGE = 16;
+
     if (combo.state === "idle") {
       if (combo.cooldown > 0) { combo.cooldown -= 1; return; }
       if (this.phase_transition || partner.phase_transition) return;
       if (this.dash_state === "dashing") return;
       combo.state = "telegraph";
-      combo.timer = 75;
+      combo.timer = 50;
     } else if (combo.state === "telegraph") {
       combo.timer -= 1;
       if (this.pattern_timer % 8 === 0) {
@@ -1879,6 +1893,83 @@ class Boss {
           particles.push(new Particle(partner.x, partner.y, DMK_PURPLE, randUniform(2, 5), angle, 20));
         }
       }
+      if (combo.timer <= 0) {
+        combo.state = "clones_active";
+        combo.clonesHit = 0;
+        combo.clones = [];
+        for (let i = 0; i < CLONE_COUNT; i++) {
+          const angleOffset = (i - (CLONE_COUNT - 1) / 2) * (Math.PI / 3);
+          combo.clones.push({
+            phase: "wait", delay: i * CLONE_DELAY, timer: 0,
+            x: partner.x, y: partner.y, angleOffset, hit: false
+          });
+        }
+      }
+    } else if (combo.state === "clones_active") {
+      const mergeX = (partner.x + this.x) / 2;
+      const mergeY = (partner.y + this.y) / 2 - 30;
+      let allDone = true;
+      for (const clone of combo.clones) {
+        if (clone.phase === "wait") {
+          allDone = false;
+          clone.delay -= 1;
+          if (clone.delay <= 0) {
+            clone.phase = "dash";
+            clone.x = partner.x; clone.y = partner.y; clone.timer = 0;
+            for (let i = 0; i < 8; i++) {
+              const angle = randUniform(0, Math.PI * 2);
+              particles.push(new Particle(clone.x, clone.y, DMK_GLOW, randUniform(2, 5), angle, 14));
+            }
+          }
+        } else if (clone.phase === "dash") {
+          allDone = false;
+          clone.timer += 1;
+          // spread the four dash paths around the target so they read as a
+          // flurry converging from different angles rather than stacking up
+          const aimX = target.x + Math.cos(clone.angleOffset) * 55;
+          const aimY = target.y + Math.sin(clone.angleOffset) * 55;
+          const adx = aimX - clone.x, ady = aimY - clone.y;
+          const adist = Math.sqrt(adx * adx + ady * ady) || 1;
+          clone.x += (adx / adist) * CLONE_SPEED;
+          clone.y += (ady / adist) * CLONE_SPEED;
+          const tdx = target.x - clone.x, tdy = target.y - clone.y;
+          const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
+          if (!clone.hit && (tdist < CLONE_HIT_RADIUS || clone.timer >= CLONE_MAX_DASH)) {
+            dealDamageTo(target, CLONE_DAMAGE, particles);
+            clone.hit = true;
+            combo.clonesHit += 1;
+            this.shakeRequest = Math.max(this.shakeRequest, 8);
+            for (let i = 0; i < 14; i++) {
+              const angle = randUniform(0, Math.PI * 2);
+              particles.push(new Particle(target.x, target.y, choice([DMK_PURPLE, DMK_MASK]), randUniform(3, 6), angle, 16));
+            }
+            clone.phase = "return";
+          }
+        } else if (clone.phase === "return") {
+          allDone = false;
+          const rdx = mergeX - clone.x, rdy = mergeY - clone.y;
+          const rdist = Math.sqrt(rdx * rdx + rdy * rdy);
+          if (rdist < 12) {
+            clone.phase = "done";
+          } else {
+            clone.x += (rdx / rdist) * CLONE_RETURN_SPEED;
+            clone.y += (rdy / rdist) * CLONE_RETURN_SPEED;
+          }
+        }
+        // "done" clones need nothing further this frame
+      }
+      if (allDone) {
+        combo.state = "merge";
+        combo.timer = MERGE_DURATION;
+        combo.cloneX = mergeX; combo.cloneY = mergeY;
+        for (let i = 0; i < 26; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(mergeX, mergeY, choice([DMK_PURPLE, WHITE]), randUniform(3, 8), angle, 22));
+        }
+        this.shakeRequest = Math.max(this.shakeRequest, 10);
+      }
+    } else if (combo.state === "merge") {
+      combo.timer -= 1;
       if (combo.timer <= 0) {
         combo.state = "transfer";
         combo.timer = 22;
@@ -1909,17 +2000,17 @@ class Boss {
       const dist = Math.sqrt(dx * dx + dy * dy);
       const outOfBounds = combo.cloneX < -60 || combo.cloneX > WIDTH + 60 || combo.cloneY < -60 || combo.cloneY > HEIGHT + 60;
       if (dist < 42) {
-        dealDamageTo(target, 20, particles);
+        dealDamageTo(target, FINAL_THROW_DAMAGE, particles);
         for (let i = 0; i < 35; i++) {
           const angle = randUniform(0, Math.PI * 2);
           particles.push(new Particle(combo.cloneX, combo.cloneY, choice([DMK_PURPLE, DDD_RED, WHITE]), randUniform(4, 9), angle, 30));
         }
         this.shakeRequest = Math.max(this.shakeRequest, 25);
         combo.state = "idle";
-        combo.cooldown = 480;
+        combo.cooldown = 560;
       } else if (outOfBounds) {
         combo.state = "idle";
-        combo.cooldown = 300;
+        combo.cooldown = 340;
       }
     }
   }
@@ -1985,30 +2076,60 @@ class Boss {
     const ds = this.duoState;
     const combo = ds.combo;
     if (combo && combo.state !== "idle") {
-      // the illusion clone itself: a small silhouette flying from Meta Knight
-      // to Dedede (transfer) and then out toward the target (launch)
-      const cx = combo.cloneX + shake[0], cy = combo.cloneY + shake[1];
-      const spin = ticks * 0.02;
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate(spin);
-      ctx.globalAlpha = combo.state === "launch" ? 0.95 : 0.6;
-      ctx.fillStyle = rgb(DMK_PURPLE);
-      ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = rgb(DMK_MASK);
-      ctx.beginPath(); ctx.ellipse(0, -2, 15, 11, 0, 0, Math.PI * 2); ctx.fill();
-      ctx.restore();
-      if (combo.state === "launch") {
-        // short motion trail so the throw reads as fast
-        ctx.strokeStyle = rgb(DDD_GLOW, 0.5);
-        ctx.lineWidth = 4;
-        ctx.beginPath();
-        ctx.moveTo(cx - combo.vx * 2, cy - combo.vy * 2);
-        ctx.lineTo(cx, cy);
-        ctx.stroke();
+      const drawClone = (px, py, alpha, scale) => {
+        ctx.save();
+        ctx.translate(px + shake[0], py + shake[1]);
+        ctx.rotate(ticks * 0.02);
+        ctx.scale(scale, scale);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = rgb(DMK_PURPLE);
+        ctx.beginPath(); ctx.arc(0, 0, 22, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = rgb(DMK_MASK);
+        ctx.beginPath(); ctx.ellipse(0, -2, 15, 11, 0, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+      };
+
+      if (combo.state === "clones_active") {
+        // the four illusion clones: each one drawn at its own dash/return
+        // position so the flurry reads as four distinct fighters, not one
+        for (const clone of combo.clones) {
+          if (clone.phase === "wait" || clone.phase === "done") continue;
+          drawClone(clone.x, clone.y, clone.hit ? 0.55 : 0.85, 0.75);
+        }
+      } else if (combo.state === "merge") {
+        // converging flash as the four clones fuse back into one
+        const cx = combo.cloneX + shake[0], cy = combo.cloneY + shake[1];
+        const flashT = 1 - Math.max(0, combo.timer) / 16;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, 1 - flashT) * 0.8;
+        ctx.fillStyle = rgb(WHITE);
+        ctx.beginPath(); ctx.arc(cx, cy, 10 + flashT * 46, 0, Math.PI * 2); ctx.fill();
+        ctx.restore();
+        drawClone(combo.cloneX, combo.cloneY, 0.9, 0.9);
+      } else {
+        // telegraph/transfer/launch: a single silhouette flying from Meta
+        // Knight to Dedede (transfer) and then out toward the target (launch)
+        const cx = combo.cloneX + shake[0], cy = combo.cloneY + shake[1];
+        drawClone(combo.cloneX, combo.cloneY, combo.state === "launch" ? 0.95 : 0.6, 1);
+        if (combo.state === "launch") {
+          // short motion trail so the throw reads as fast
+          ctx.strokeStyle = rgb(DDD_GLOW, 0.5);
+          ctx.lineWidth = 4;
+          ctx.beginPath();
+          ctx.moveTo(cx - combo.vx * 2, cy - combo.vy * 2);
+          ctx.lineTo(cx, cy);
+          ctx.stroke();
+        }
       }
 
-      const label = combo.state === "launch" ? "합동 공격!" : "합동 공격 준비!";
+      const labels = {
+        telegraph: "합동 공격 준비!",
+        clones_active: "환영 난무!",
+        merge: "합체!",
+        transfer: "합동 공격 준비!",
+        launch: "합동 공격!"
+      };
+      const label = labels[combo.state] || "합동 공격 준비!";
       ctx.fillStyle = combo.state === "launch" ? rgb(RED) : rgb(YELLOW);
       ctx.font = "bold 26px sans-serif";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
@@ -2021,7 +2142,7 @@ class Boss {
       ctx.fillStyle = `rgba(255,215,0,${alpha})`;
       ctx.font = "bold 30px sans-serif";
       ctx.textAlign = "center"; ctx.textBaseline = "middle";
-      ctx.fillText("맥시멈 토마토를 나눠 먹었다!", WIDTH, 220);
+      ctx.fillText("맥시멈 토마토를 나눠 먹었다!", WIDTH / 2, 110);
       ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     }
   }
@@ -2784,7 +2905,7 @@ class Game {
           max_health: DUO_MAX_HEALTH,
           revived: false,
           reviveTextTimer: 0,
-          combo: { state: "idle", timer: 0, cooldown: 240, cloneX: 0, cloneY: 0, vx: 0, vy: 0 }
+          combo: { state: "idle", timer: 0, cooldown: 240, cloneX: 0, cloneY: 0, vx: 0, vy: 0, clones: [], clonesHit: 0 }
         };
         metas[i].duoState = duoState;
         dededes[i].duoState = duoState;
@@ -2946,7 +3067,7 @@ class Game {
         processedDuo.add(ds);
         if (ds.health <= 0 && !ds.revived) {
           ds.revived = true;
-          ds.health = Math.round(ds.max_health * 0.65);
+          ds.health = ds.max_health;
           ds.reviveTextTimer = 150;
           let midX = 0, midY = 0, count = 0;
           for (const partner of this.bosses) {
