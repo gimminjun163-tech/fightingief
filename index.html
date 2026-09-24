@@ -1,0 +1,2159 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Kirby Boss Battle</title>
+<style>
+  :root {
+    --bg: #0a0518;
+    --panel-bg: #1a1330;
+    --text: #f0f0f0;
+    --accent: #9370db;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #05030d;
+      --panel-bg: #14102a;
+      --text: #f0f0f0;
+      --accent: #9370db;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #05030d;
+    --panel-bg: #14102a;
+    --text: #f0f0f0;
+    --accent: #9370db;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Pretendard, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+  h1 {
+    font-size: clamp(16px, 3vw, 24px);
+    margin: 14px 0 6px 0;
+    letter-spacing: 1px;
+    color: var(--accent);
+    text-align: center;
+  }
+  #canvas-wrap {
+    width: 100%;
+    max-width: 1280px;
+    aspect-ratio: 1280 / 720;
+    position: relative;
+    margin: 0 auto;
+    padding: 0 8px;
+  }
+  canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    border-radius: 10px;
+    box-shadow: 0 0 40px rgba(147, 112, 219, 0.35);
+    background: #0a0520;
+    touch-action: none;
+  }
+  #controls {
+    max-width: 1280px;
+    width: 100%;
+    padding: 10px 16px 24px 16px;
+    font-size: 13px;
+    color: #cfc6e6;
+    text-align: center;
+    line-height: 1.7;
+  }
+  #controls b { color: var(--text); }
+  .key {
+    display: inline-block;
+    background: var(--panel-bg);
+    border: 1px solid var(--accent);
+    border-radius: 5px;
+    padding: 1px 7px;
+    margin: 0 2px;
+    font-family: monospace;
+    font-size: 12px;
+  }
+  #overlay-msg {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-size: clamp(14px, 2.4vw, 20px);
+    background: rgba(0,0,0,0.35);
+    border-radius: 10px;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s;
+    text-align: center;
+    padding: 20px;
+  }
+  #overlay-msg.show { opacity: 1; }
+
+  #boss-select {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    background: rgba(5, 3, 13, 0.88);
+    border-radius: 10px;
+    z-index: 5;
+  }
+  #boss-select h2 {
+    color: var(--text);
+    font-size: clamp(16px, 2.6vw, 24px);
+    margin: 0 0 4px 0;
+    letter-spacing: 1px;
+  }
+  #boss-select .cards {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+    justify-content: center;
+    padding: 0 16px;
+  }
+  .boss-card {
+    position: relative;
+    width: 190px;
+    padding: 16px 14px;
+    border-radius: 12px;
+    background: var(--panel-bg);
+    border: 2px solid rgba(147, 112, 219, 0.4);
+    color: var(--text);
+    cursor: pointer;
+    font-family: inherit;
+    text-align: center;
+    transition: border-color 0.15s, transform 0.15s, background 0.15s;
+  }
+  .boss-card:hover, .boss-card.selected {
+    border-color: var(--accent);
+    transform: translateY(-4px);
+  }
+  .boss-card.picked {
+    border-color: #4ade80;
+    background: rgba(74, 222, 128, 0.12);
+  }
+  .boss-card.picked::after {
+    content: "✓";
+    position: absolute;
+    top: 8px; right: 10px;
+    width: 20px; height: 20px;
+    border-radius: 50%;
+    background: #4ade80;
+    color: #0a0518;
+    font-size: 13px;
+    font-weight: 900;
+    line-height: 20px;
+  }
+  .boss-card .swatch {
+    width: 56px; height: 56px;
+    border-radius: 50%;
+    margin: 0 auto 10px auto;
+  }
+  .boss-card .name {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 6px;
+  }
+  .boss-card .desc {
+    font-size: 12px;
+    color: #cfc6e6;
+    line-height: 1.5;
+  }
+  #boss-select .hint {
+    font-size: 12px;
+    color: #cfc6e6;
+  }
+  .team-toggle {
+    display: inline-block;
+    margin-top: 8px;
+    padding: 3px 10px;
+    border-radius: 999px;
+    font-size: 11px;
+    font-weight: 700;
+    font-family: inherit;
+    border: 1px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    background: rgba(255, 80, 80, 0.18);
+    color: #ff9d9d;
+  }
+  .team-toggle.team-ally {
+    background: rgba(74, 222, 128, 0.18);
+    color: #8ff0b0;
+    border-color: rgba(74, 222, 128, 0.5);
+  }
+  .boss-card.team-enemy {
+    box-shadow: 0 0 0 1px rgba(255,80,80,0.25) inset;
+  }
+  .boss-card.team-ally.picked {
+    border-color: #4ade80;
+    box-shadow: 0 0 12px rgba(74, 222, 128, 0.4);
+  }
+  .boss-card.team-enemy.picked {
+    border-color: #ff5050;
+    background: rgba(255, 80, 80, 0.1);
+  }
+  .boss-card.team-enemy.picked::after {
+    background: #ff5050;
+    color: #fff;
+  }
+  #spectator-row {
+    font-size: 13px;
+    color: #cfc6e6;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  #start-battle-btn {
+    padding: 10px 28px;
+    border-radius: 10px;
+    border: 2px solid #4ade80;
+    background: rgba(74, 222, 128, 0.15);
+    color: var(--text);
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 700;
+    cursor: pointer;
+    transition: opacity 0.15s, transform 0.15s;
+  }
+  #start-battle-btn:hover:not(:disabled) { transform: translateY(-2px); }
+  #start-battle-btn:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+</style>
+</head>
+<body>
+<h1>✨ KIRBY BOSS BATTLE ✨</h1>
+<div id="canvas-wrap">
+  <canvas id="game" width="1280" height="720"></canvas>
+  <div id="boss-select">
+    <h2>도전할 보스를 선택하세요 (여러 명 동시 선택 가능)</h2>
+    <div class="cards">
+      <div class="boss-card" role="button" tabindex="0" data-boss="magolor" data-index="0">
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #4b0082, #9370db);"></div>
+        <div class="name">MAGOLOR<br>마골로어</div>
+        <div class="desc">균형 잡힌 마법사<br>순간이동 + 유도탄</div>
+        <button class="team-toggle" type="button" data-team-index="0">적(ENEMY)</button>
+      </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="marx" data-index="1">
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #ff1478, #ff69b4);"></div>
+        <div class="name">MARX<br>마르크</div>
+        <div class="desc">빠르고 변칙적인 광대<br>순간이동 + 저격탄</div>
+        <button class="team-toggle" type="button" data-team-index="1">적(ENEMY)</button>
+      </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="dedede" data-index="2">
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #1e3c96, #4169e1);"></div>
+        <div class="name">KING DEDEDE<br>디디디 대왕</div>
+        <div class="desc">묵직한 몸집과 체력<br>망치 충격파 + 돌진</div>
+        <button class="team-toggle" type="button" data-team-index="2">적(ENEMY)</button>
+      </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="zangief" data-index="3">
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #8b0000, #deb887);"></div>
+        <div class="name">ZANGIEF<br>장기에프</div>
+        <div class="desc">압도적인 근접 그래플러<br>잡기 돌진 + 강력한 근거리</div>
+        <button class="team-toggle" type="button" data-team-index="3">적(ENEMY)</button>
+      </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="liwancha" data-index="4">
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #2a0505, #b0202c);"></div>
+        <div class="name">LIWANCHA<br>리완차</div>
+        <div class="desc">묵직한 차지 격투가<br>차지 돌진 + 기절 유발</div>
+        <button class="team-toggle" type="button" data-team-index="4">적(ENEMY)</button>
+      </div>
+    </div>
+    <button id="start-battle-btn" disabled>전투 시작 (0명 선택됨)</button>
+    <div id="spectator-row"><label><input type="checkbox" id="spectator-checkbox"> 관전 모드 (플레이어 없이 보스끼리 대결 관전)</label></div>
+    <div class="hint">카드를 클릭/터치해 원하는 보스를 여러 명 고르세요 · 방향키로 커서 이동, <span class="key">Z</span>로 선택/해제, <span class="key">Shift</span>로 팀 전환(적/아군), <span class="key">X</span>로 전투 시작</div>
+  </div>
+</div>
+<div id="controls">
+  <b>이동</b> <span class="key">방향키</span> / <span class="key">WASD</span> &nbsp;·&nbsp;
+  <b>공격</b> <span class="key">Z</span> &nbsp;·&nbsp;
+  <b>차지샷 (모으기→발사)</b> <span class="key">X</span> &nbsp;·&nbsp;
+  <b>포커스(무적, 이동 느려짐)</b> <span class="key">Shift</span>
+  <br>선택한 보스를 모두 쓰러뜨리면 승리합니다. 체력이 다하거나 승리하면 잠시 후 보스 선택 화면으로 돌아갑니다.
+</div>
+
+<script>
+(function() {
+"use strict";
+
+const WIDTH = 1280, HEIGHT = 720;
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+// ---------- colors ----------
+const WHITE = [255,255,255];
+const BLACK = [0,0,0];
+const PINK = [255,182,193];
+const NAPJAK = [255,150,170];
+const RED = [255,80,80];
+const BLUE = [100,149,237];
+const PURPLE = [147,112,219];
+const YELLOW = [255,215,0];
+const ORANGE = [255,165,0];
+const CYAN = [0,255,255];
+const DARK_PURPLE = [75,0,130];
+const LIGHT_BLUE = [173,216,230];
+const MARX_PINK = [255,105,180];
+const MARX_RED = [220,20,60];
+const MARX_HAT = [255,20,120];
+const DEDEDE_BLUE = [65,105,225];
+const DEDEDE_DARKBLUE = [30,60,150];
+const DEDEDE_YELLOW = [255,215,0];
+const DEDEDE_RED = [200,30,30];
+const ZANGIEF_SKIN = [222,184,135];
+const ZANGIEF_RED = [178,34,34];
+const ZANGIEF_HAIR = [139,0,0];
+const ZANGIEF_DARK = [90,60,40];
+const LIWANCHA_RED = [178,20,30];
+const LIWANCHA_DARKRED = [90,10,16];
+const LIWANCHA_BLACK = [25,20,22];
+const LIWANCHA_GOLD = [230,180,60];
+const LIWANCHA_AURA = [255,60,40];
+
+function rgb(c, a) {
+  if (a === undefined) {
+    // the same handful of palette-color arrays get passed in thousands of
+    // times per second (every bullet/particle draw call) — cache the css
+    // string on the array itself instead of building a new one every time
+    if (c._rgb === undefined) c._rgb = `rgb(${c[0]},${c[1]},${c[2]})`;
+    return c._rgb;
+  }
+  return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+}
+function lighten(c, amt) {
+  return [Math.min(255, c[0]+amt), Math.min(255, c[1]+amt), Math.min(255, c[2]+amt)];
+}
+function randInt(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
+function randUniform(a, b) { return Math.random() * (b - a) + a; }
+function choice(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
+function now() { return performance.now() / 1000; }
+
+// Normalizes direct-contact damage between the player and a boss, whose
+// take_damage signatures are (annoyingly) reversed: Player.take_damage(particles, dm)
+// vs Boss.take_damage(damage, particles). Lets attacks like Zangief's grab or
+// Liwancha's dash hit either the player or an opposing boss with one call.
+function dealDamageTo(target, amount, particles) {
+  if (!target) return;
+  if (target instanceof Player || target.isPlayer) {
+    target.take_damage(particles, amount);
+  } else {
+    target.take_damage(amount, particles);
+  }
+}
+
+// ---------- input ----------
+const keys = {};
+const keyMap = {
+  ArrowLeft: "left", ArrowRight: "right", ArrowUp: "up", ArrowDown: "down",
+  KeyA: "left", KeyD: "right", KeyW: "up", KeyS: "down",
+  ShiftLeft: "shift", ShiftRight: "shift",
+  KeyZ: "z", KeyX: "x", Escape: "escape"
+};
+window.addEventListener("keydown", (e) => {
+  const k = keyMap[e.code];
+  if (k) { keys[k] = true; e.preventDefault(); }
+});
+window.addEventListener("keyup", (e) => {
+  const k = keyMap[e.code];
+  if (k) { keys[k] = false; e.preventDefault(); }
+});
+
+// ---------- Particle ----------
+class Particle {
+  constructor(x, y, color, speed, angle, lifetime) {
+    this.x = x; this.y = y; this.color = color;
+    this.vx = Math.cos(angle) * speed;
+    this.vy = Math.sin(angle) * speed;
+    this.lifetime = lifetime;
+    this.max_lifetime = lifetime;
+    this.size = randInt(2, 6);
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    this.lifetime -= 1;
+    this.vy += 0.1;
+    return this.lifetime > 0;
+  }
+  draw(shake) {
+    const alpha = this.lifetime / this.max_lifetime;
+    const size = Math.floor(this.size * alpha);
+    if (size > 0) {
+      ctx.fillStyle = rgb(this.color);
+      ctx.beginPath();
+      ctx.arc(this.x + shake[0], this.y + shake[1], size, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+}
+
+// ---------- Bullet ----------
+class Bullet {
+  constructor(x, y, vx, vy, color, size, damage, is_player = true, team = "enemy") {
+    this.x = x; this.y = y; this.vx = vx; this.vy = vy;
+    this.color = color; this.size = size; this.damage = damage;
+    this.is_player = is_player;
+    // which side fired this bullet (only meaningful when is_player is false) —
+    // used to route boss-vs-boss / boss-vs-player collisions by team
+    this.team = team;
+    this.lifetime = 0;
+    // computed once per bullet instead of once per frame per bullet
+    this.glow = lighten(color, 100);
+  }
+  update() {
+    this.x += this.vx; this.y += this.vy;
+    this.lifetime += 1;
+    return this.x >= 0 && this.x <= WIDTH && this.y >= 0 && this.y <= HEIGHT;
+  }
+  draw(shake) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    ctx.fillStyle = rgb(this.color);
+    ctx.beginPath();
+    ctx.arc(x, y, this.size, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = rgb(this.glow);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(x, y, this.size + 2, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+class HomingBullet extends Bullet {
+  constructor(x, y, speed, color, size, damage, target, team = "enemy") {
+    super(x, y, 0, 0, color, size, damage, false, team);
+    this.speed = speed;
+    this.target = target;
+    this.homing_strength = 0.07;
+    this.madetime = now();
+  }
+  update() {
+    if (this.target) {
+      const dx = this.target.x - this.x, dy = this.target.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > 0) {
+        const tvx = (dx / dist) * this.speed;
+        const tvy = (dy / dist) * this.speed;
+        this.vx += (tvx - this.vx) * this.homing_strength;
+        this.vy += (tvy - this.vy) * this.homing_strength;
+      }
+    }
+    this.x += this.vx; this.y += this.vy;
+    this.lifetime += 1;
+    return this.x >= 0 && this.x <= WIDTH + 100 && this.y >= 0 && this.y <= HEIGHT + 100
+      && (now() - this.madetime) <= 3.75;
+  }
+}
+
+class StarBullet extends Bullet {
+  draw(shake) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const pts = [];
+    for (let i = 0; i < 5; i++) {
+      const angle = (i * 144 + this.lifetime * 5) * Math.PI / 180;
+      pts.push([x + Math.cos(angle) * this.size, y + Math.sin(angle) * this.size]);
+    }
+    ctx.fillStyle = rgb(this.color);
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgb(YELLOW);
+    ctx.lineWidth = 2;
+    ctx.stroke();
+  }
+}
+
+// ---------- Wing ----------
+class Wing {
+  constructor(x, y, angle, color, homeBoss = null, team = "enemy") {
+    this.x = x; this.y = y;
+    this.vx = Math.cos(angle) * 8;
+    this.vy = Math.sin(angle) * 8;
+    this.color = color;
+    this.size = 20;
+    this.rotation = 0;
+    this.lifetime = 0;
+    this.returning = false;
+    this.return_timer = 80;
+    this.is_player = false;
+    this.damage = 1;
+    this.team = team;
+    // which boss instance this wing returns to (multiple bosses can be on screen at once)
+    this.homeBoss = homeBoss;
+  }
+  update(boss_x, boss_y) {
+    this.lifetime += 1;
+    this.rotation += 15;
+    if (!this.returning && this.lifetime > this.return_timer) this.returning = true;
+    if (this.returning) {
+      const dx = boss_x - this.x, dy = boss_y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist > 10) {
+        this.vx = (dx / dist) * 12;
+        this.vy = (dy / dist) * 12;
+      } else {
+        return false;
+      }
+    }
+    this.x += this.vx; this.y += this.vy;
+    return this.x >= 0 && this.x <= WIDTH + 200 && this.y >= 0 && this.y <= HEIGHT + 200;
+  }
+  draw(shake) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const pts = [];
+    for (let i = 0; i < 3; i++) {
+      const angle = (i * 120 + this.rotation) * Math.PI / 180;
+      pts.push([x + Math.cos(angle) * this.size, y + Math.sin(angle) * this.size]);
+    }
+    ctx.fillStyle = rgb(this.color);
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p[0], p[1]) : ctx.lineTo(p[0], p[1]));
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = rgb(WHITE);
+    ctx.lineWidth = 3;
+    ctx.stroke();
+  }
+}
+
+// ---------- Player ----------
+class Player {
+  constructor() {
+    this.isPlayer = true;
+    this.x = 200; this.y = HEIGHT / 2;
+    this.speed = 5; this.slow_speed = 2;
+    this.max_health = 40; this.health = this.max_health;
+    this.invincible = 0;
+    this.charge = 0; this.max_charge = 60;
+    this.shoot_cooldown = 0; this.charge_shot_cooldown = 0; this.hit_cooldown = 0;
+    this.bang = 0;
+    this.damage_clock = 0;
+  }
+  update(k) {
+    const speed = (k.shift || this.bang) ? this.slow_speed : this.speed;
+    if (k.shift && this.invincible === 0) {
+      this.invincible = 250;
+      this.bang = 1;
+    }
+    if (k.left) this.x -= speed;
+    if (k.right) this.x += speed;
+    if (k.up) this.y -= speed;
+    if (k.down) this.y += speed;
+
+    this.x = Math.max(40, Math.min(WIDTH - 40, this.x));
+    this.y = Math.max(40, Math.min(HEIGHT - 40, this.y));
+
+    if (this.invincible > 0) this.invincible -= 1;
+    else this.bang = 0;
+
+    if (this.shoot_cooldown > 0) this.shoot_cooldown -= 1;
+    if (this.charge_shot_cooldown > 0) this.charge_shot_cooldown -= 1;
+    if (this.hit_cooldown > 0) this.hit_cooldown -= 1;
+
+    if (k.x && !this.bang) this.charge = Math.min(this.max_charge, this.charge + 1);
+    else this.charge = 0;
+  }
+  shoot(bullets, particles) {
+    if (this.shoot_cooldown === 0) {
+      bullets.push(new Bullet(this.x + 30, this.y - 10, 12, 0, YELLOW, 6, 5));
+      bullets.push(new Bullet(this.x + 30, this.y + 10, 12, 0, YELLOW, 6, 5));
+      this.shoot_cooldown = 5;
+      for (let i = 0; i < 3; i++) {
+        const angle = randUniform(-0.3, 0.3);
+        particles.push(new Particle(this.x + 30, this.y, ORANGE, randUniform(2, 4), Math.PI + angle, 15));
+      }
+    }
+  }
+  charge_shot(bullets, particles) {
+    if (this.charge >= this.max_charge && this.charge_shot_cooldown === 0) {
+      for (let i = 0; i < 8; i++) {
+        const angle = (i * 45) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle) * 10, Math.sin(angle) * 10, CYAN, 10, 15));
+      }
+      this.charge = 0;
+      this.charge_shot_cooldown = 30;
+      for (let i = 0; i < 30; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, CYAN, randUniform(3, 8), angle, 30));
+      }
+      return true;
+    }
+    return false;
+  }
+  take_damage(particles, dm = 1) {
+    if (this.invincible === 0 && this.hit_cooldown === 0) {
+      this.health -= dm;
+      this.invincible = 100;
+      this.hit_cooldown = 20;
+      this.damage_clock = now();
+      for (let i = 0; i < 20; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, RED, randUniform(3, 6), angle, 25));
+      }
+      return true;
+    }
+    return false;
+  }
+  drawPig(shake) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    ctx.fillStyle = rgb(PINK);
+    ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = "rgb(255,105,180)"; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2); ctx.stroke();
+
+    ctx.fillStyle = rgb(BLACK);
+    ctx.beginPath(); ctx.arc(x-8, y-5, 4, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+8, y-5, 4, 0, Math.PI*2); ctx.fill();
+
+    ctx.fillStyle = "rgb(255,105,180)";
+    ctx.beginPath(); ctx.ellipse(x, y+9, 12, 4, 0, 0, Math.PI*2); ctx.fill();
+
+    ctx.fillStyle = rgb(LIGHT_BLUE);
+    ctx.beginPath(); ctx.ellipse(x-27.5, y+2.5, 7.5, 12.5, 0, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(x+27.5, y+2.5, 7.5, 12.5, 0, 0, Math.PI*2); ctx.fill();
+  }
+  draw(shake) {
+    if (!this.bang && !this.invincible) {
+      this.drawPig(shake);
+    } else if (this.bang) {
+      const x = this.x + shake[0], y = this.y + shake[1];
+      ctx.fillStyle = rgb(NAPJAK);
+      ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = "rgb(255,105,180)"; ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, 25, 0, Math.PI*2); ctx.stroke();
+      ctx.fillStyle = "rgb(255,0,0)";
+      ctx.beginPath(); ctx.arc(x, y, 45, 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle = rgb(BLACK);
+      ctx.beginPath(); ctx.arc(x-8, y-5, 4, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x+8, y-5, 4, 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle = "rgb(255,105,180)";
+      ctx.beginPath(); ctx.ellipse(x, y+9, 12, 4, 0, 0, Math.PI*2); ctx.fill();
+
+      ctx.fillStyle = rgb(LIGHT_BLUE);
+      ctx.beginPath(); ctx.ellipse(x-27.5, y+2.5, 7.5, 12.5, 0, 0, Math.PI*2); ctx.fill();
+      ctx.beginPath(); ctx.ellipse(x+27.5, y+2.5, 7.5, 12.5, 0, 0, Math.PI*2); ctx.fill();
+    } else {
+      // invincibility flicker (matches original timing logic)
+      if ((10 * (now() - this.damage_clock)) % 3 !== 0) {
+        this.drawPig(shake);
+      }
+    }
+  }
+}
+
+// ---------- Boss configs ----------
+const BOSS_CONFIGS = {
+  magolor:  { name: "MAGOLOR", max_health: 750, desc: "마골로어 — 균형잡힌 마법사" },
+  marx:     { name: "MARX",    max_health: 650, desc: "마르크 — 빠르고 변칙적인 광대" },
+  dedede:   { name: "KING DEDEDE", max_health: 900, desc: "디디디 대왕 — 묵직한 망치 공격" },
+  zangief:  { name: "ZANGIEF", max_health: 1700, desc: "장기에프 — 압도적인 근접 그래플러" },
+  liwancha: { name: "LIWANCHA", max_health: 1700, desc: "리완차 — 묵직한 차지 격투가, 차지 돌진 + 기절 유발" }
+};
+
+// ---------- Boss ----------
+class Boss {
+  constructor(type = "magolor", team = "enemy") {
+    this.type = type;
+    // 'enemy' fights the player (and any 'ally' bosses); 'ally' fights only 'enemy' bosses
+    this.team = team;
+    const cfg = BOSS_CONFIGS[type] || BOSS_CONFIGS.magolor;
+    this.name = cfg.name;
+    this.x = WIDTH - 200; this.y = HEIGHT / 2;
+    this.max_health = cfg.max_health;
+    this.health = this.max_health;
+    this.phase = 1;
+    this.pattern_timer = 0;
+    this.pattern_index = 0;
+    this.move_timer = 0;
+    this.target_y = this.y;
+    this.target_x = this.x;
+    this.invincible = 0;
+    this.flash = 0;
+    this.phase_transition = false;
+    this.phase_transition_timer = 0;
+    this.teleport_timer = 0;
+    this.wing_attack_cooldown = 0;
+    this.hammer_cooldown = 0;
+    this.charge_cooldown = 0;
+    // zangief-specific: grab dash state
+    this.dash_state = "idle";
+    this.dash_timer = 0;
+    this.dash_target_x = this.x;
+    this.dash_target_y = this.y;
+    this.grab_cooldown = 90;
+    this.punch_cooldown = 0;
+    this.shakeRequest = 0;
+    // liwancha-specific: charge -> dash state machine + poise-break
+    this.liw_state = "idle"; // idle | charging | dashing | dazed
+    this.liw_timer = 0;
+    this.liw_dash_target_x = this.x;
+    this.liw_dash_target_y = this.y;
+    this.liw_cooldown = 120;
+    this.poise_damage = 0; // accumulates while charging; reset on entering charging
+    this.poise_threshold = Infinity; // set per-phase; if exceeded during charging -> dazed
+  }
+  pickTarget(player, allBosses) {
+    // nearest opponent: for an 'enemy' boss that's the player or any 'ally' boss;
+    // for an 'ally' boss that's any 'enemy' boss only.
+    let best = null, bestDist = Infinity;
+    const consider = (obj) => {
+      if (!obj) return;
+      const dx = obj.x - this.x, dy = obj.y - this.y;
+      const d = dx*dx + dy*dy;
+      if (d < bestDist) { bestDist = d; best = obj; }
+    };
+    if (this.team === "enemy") {
+      if (player && player.health > 0) consider(player);
+      if (allBosses) {
+        for (const b of allBosses) {
+          if (b !== this && b.team === "ally") consider(b);
+        }
+      }
+    } else {
+      // ally boss: only hostile toward enemy-team bosses, never the player
+      if (allBosses) {
+        for (const b of allBosses) {
+          if (b !== this && b.team === "enemy") consider(b);
+        }
+      }
+    }
+    // fall back to the player so old single-target patterns never crash
+    // when there's genuinely nobody to target (e.g. all allies dead)
+    return best || player;
+  }
+  update(player, bullets, particles, allBosses) {
+    if (this.phase_transition) {
+      // each boss manages its own transition pause independently, so with
+      // several bosses on screen one flashing/transitioning doesn't freeze
+      // the others
+      this.phase_transition_timer += 1;
+      if (this.phase_transition_timer > 120) {
+        this.phase_transition = false;
+        this.phase_transition_timer = 0;
+        this.shakeRequest = Math.max(this.shakeRequest, 30);
+      }
+      return;
+    }
+    this.pattern_timer += 1;
+    this.move_timer += 1;
+
+    if (this.invincible > 0) this.invincible -= 1;
+    if (this.flash > 0) this.flash -= 1;
+    if (this.wing_attack_cooldown > 0) this.wing_attack_cooldown -= 1;
+    if (this.hammer_cooldown > 0) this.hammer_cooldown -= 1;
+    if (this.charge_cooldown > 0) this.charge_cooldown -= 1;
+
+    const dy = this.target_y - this.y;
+    this.y += dy * 0.05;
+    const dx = this.target_x - this.x;
+    this.x += dx * 0.05;
+
+    const target = this.pickTarget(player, allBosses);
+
+    if (this.move_timer > 120 && this.dash_state !== "dashing" && this.liw_state !== "dashing") {
+      this.target_y = randInt(150, HEIGHT - 150);
+      if (this.type === "marx") {
+        this.target_x = randInt(Math.floor(WIDTH * 0.5), WIDTH - 120);
+      } else {
+        this.target_x = this.team === "ally" ? 200 : WIDTH - 200;
+      }
+      this.move_timer = 0;
+    }
+
+    if (this.type === "magolor") {
+      if (this.phase === 1) this.phase1_magolor(bullets, particles);
+      else if (this.phase === 2) this.phase2_magolor(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_magolor(target, bullets, particles);
+    } else if (this.type === "marx") {
+      if (this.phase === 1) this.phase1_marx(bullets, particles);
+      else if (this.phase === 2) this.phase2_marx(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_marx(target, bullets, particles);
+    } else if (this.type === "dedede") {
+      if (this.phase === 1) this.phase1_dedede(bullets, particles);
+      else if (this.phase === 2) this.phase2_dedede(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_dedede(target, bullets, particles);
+    } else if (this.type === "zangief") {
+      if (this.phase === 1) this.phase1_zangief(target, bullets, particles);
+      else if (this.phase === 2) this.phase2_zangief(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_zangief(target, bullets, particles);
+    } else if (this.type === "liwancha") {
+      if (this.phase === 1) this.phase1_liwancha(target, bullets, particles);
+      else if (this.phase === 2) this.phase2_liwancha(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_liwancha(target, bullets, particles);
+    }
+
+    if (this.health <= Math.floor(this.max_health/3) * 2 && this.phase === 1) {
+      this.phase = 2; this.phase_transition = true; this.pattern_timer = 0;
+    } else if (this.health <= Math.floor(this.max_health/3) && this.phase === 2) {
+      this.phase = 3; this.phase_transition = true; this.pattern_timer = 0;
+    }
+  }
+
+  // ===== MAGOLOR patterns =====
+  phase1_magolor(bullets, particles) {
+    if (this.pattern_timer % 40 === 0) {
+      for (let i = 0; i < 16; i++) {
+        const angle = (i * 22.5 + this.pattern_timer) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*4, Math.sin(angle)*4, PURPLE, 8, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 120 === 0) {
+      for (let i = 0; i < 12; i++) {
+        const angle = (i * 30) * Math.PI / 180;
+        bullets.push(new StarBullet(this.x, this.y, Math.cos(angle)*6, Math.sin(angle)*6, YELLOW, 10, 1, false, this.team));
+      }
+    }
+  }
+  phase2_magolor(player, bullets, particles) {
+    if (this.pattern_timer % 30 === 0) {
+      for (let i = 0; i < 20; i++) {
+        const angle = (i * 18 + this.pattern_timer * 2) * Math.PI / 180;
+        const speed = 3 + (i % 3);
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*speed, Math.sin(angle)*speed, ORANGE, 7, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 90 === 0) {
+      for (let i = 0; i < 3; i++) {
+        bullets.push(new HomingBullet(this.x, this.y, 5, RED, 12, 1, player, this.team));
+      }
+    }
+    if (this.pattern_timer % 180 === 0 && this.wing_attack_cooldown === 0) {
+      for (let i = 0; i < 4; i++) {
+        const angle = (i * 90 + 45) * Math.PI / 180;
+        bullets.push(new Wing(this.x, this.y, angle, CYAN, this, this.team));
+      }
+      this.wing_attack_cooldown = 200;
+    }
+  }
+  phase3_magolor(player, bullets, particles) {
+    if (this.pattern_timer % 20 === 0) {
+      for (let i = 0; i < 24; i++) {
+        const angle = (i * 15 + this.pattern_timer * 3) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*5, Math.sin(angle)*5, RED, 9, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 60 === 0) {
+      for (let i = 0; i < 5; i++) {
+        bullets.push(new HomingBullet(this.x, this.y, 6, PURPLE, 14, 1, player, this.team));
+      }
+    }
+    if (this.pattern_timer % 150 === 0) {
+      this.teleport_timer = 30;
+      const new_x = randInt(Math.floor(WIDTH/2), WIDTH - 150);
+      const new_y = randInt(150, HEIGHT - 150);
+      for (let i = 0; i < 40; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, PURPLE, randUniform(5, 10), angle, 30));
+      }
+      this.x = new_x; this.y = new_y; this.target_x = new_x; this.target_y = new_y;
+      for (let i = 0; i < 40; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, CYAN, randUniform(5, 10), angle, 30));
+      }
+    }
+    if (this.pattern_timer % 200 === 0) {
+      for (let x = 0; x < WIDTH; x += 80) {
+        bullets.push(new Bullet(x, -20, 0, 7, YELLOW, 15, 1, false, this.team));
+      }
+    }
+  }
+
+  // ===== MARX patterns =====
+  phase1_marx(bullets, particles) {
+    if (this.pattern_timer % 35 === 0) {
+      for (let i = 0; i < 10; i++) {
+        const angle = (i * 36 + this.pattern_timer * 2) * Math.PI / 180;
+        bullets.push(new StarBullet(this.x, this.y, Math.cos(angle)*5, Math.sin(angle)*5, MARX_PINK, 9, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 100 === 0) {
+      for (let i = -2; i <= 2; i++) {
+        bullets.push(new Bullet(this.x, this.y, -8, i * 1.2, YELLOW, 7, 1, false, this.team));
+      }
+    }
+  }
+  phase2_marx(player, bullets, particles) {
+    if (this.pattern_timer % 25 === 0) {
+      for (let i = 0; i < 14; i++) {
+        const angle = (i * (360/14) + this.pattern_timer * 3) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*4.5, Math.sin(angle)*4.5, MARX_RED, 7, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 70 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 6, MARX_PINK, 11, 1, player, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 6, MARX_PINK, 11, 1, player, this.team));
+    }
+    if (this.pattern_timer % 140 === 0) {
+      // teleport dash - Marx's signature trick
+      for (let i = 0; i < 30; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, MARX_HAT, randUniform(4, 9), angle, 25));
+      }
+      const nx = randInt(Math.floor(WIDTH/2), WIDTH - 120);
+      const ny = randInt(120, HEIGHT - 120);
+      this.x = nx; this.y = ny; this.target_x = nx; this.target_y = ny;
+      for (let i = 0; i < 16; i++) {
+        const angle = (i * 22.5) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*5, Math.sin(angle)*5, MARX_RED, 8, 1, false, this.team));
+      }
+    }
+  }
+  phase3_marx(player, bullets, particles) {
+    if (this.pattern_timer % 15 === 0) {
+      for (let i = 0; i < 18; i++) {
+        const angle = (i * 20 + this.pattern_timer * 4) * Math.PI / 180;
+        bullets.push(new StarBullet(this.x, this.y, Math.cos(angle)*6, Math.sin(angle)*6, MARX_PINK, 9, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 45 === 0) {
+      // fast laser-like sniper stream aimed at player
+      const dx = player.x - this.x, dy = player.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      const bvx = (dx/dist) * 13, bvy = (dy/dist) * 13;
+      for (let i = -1; i <= 1; i++) {
+        bullets.push(new Bullet(this.x, this.y, bvx + i*0.6, bvy - i*0.6, MARX_RED, 6, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 100 === 0) {
+      const nx = randInt(Math.floor(WIDTH*0.4), WIDTH - 100);
+      const ny = randInt(100, HEIGHT - 100);
+      for (let i = 0; i < 35; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, MARX_HAT, randUniform(4, 9), angle, 25));
+      }
+      this.x = nx; this.y = ny; this.target_x = nx; this.target_y = ny;
+      for (let i = 0; i < 20; i++) {
+        const angle = (i * 18) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*6, Math.sin(angle)*6, YELLOW, 8, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 60 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 7, MARX_RED, 12, 1, player, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 7, MARX_RED, 12, 1, player, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 7, MARX_RED, 12, 1, player, this.team));
+    }
+  }
+
+  // ===== KING DEDEDE patterns =====
+  phase1_dedede(bullets, particles) {
+    if (this.pattern_timer % 55 === 0) {
+      for (let i = -4; i <= 4; i++) {
+        const angle = (180 + i * 8) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*5, Math.sin(angle)*5, DEDEDE_BLUE, 9, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 130 === 0 && this.hammer_cooldown === 0) {
+      // ground pound shockwave ring
+      for (let i = 0; i < 18; i++) {
+        const angle = (i * 20) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y + 30, Math.cos(angle)*4, Math.sin(angle)*4, DEDEDE_YELLOW, 8, 1, false, this.team));
+      }
+      this.hammer_cooldown = 60;
+      for (let i = 0; i < 15; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y + 30, DEDEDE_YELLOW, randUniform(3, 6), angle, 20));
+      }
+    }
+  }
+  phase2_dedede(player, bullets, particles) {
+    if (this.pattern_timer % 40 === 0) {
+      for (let i = 0; i < 16; i++) {
+        const angle = (i * 22.5 + this.pattern_timer * 2) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*5, Math.sin(angle)*5, DEDEDE_BLUE, 8, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 90 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 4.5, DEDEDE_RED, 15, 1, player, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 4.5, DEDEDE_RED, 15, 1, player, this.team));
+    }
+    if (this.pattern_timer % 160 === 0 && this.charge_cooldown === 0) {
+      // hammer charge: dash toward player's current y then ground pound
+      this.target_x = WIDTH - 350;
+      this.target_y = player.y;
+      this.charge_cooldown = 160;
+    }
+    if (this.pattern_timer % 130 === 0 && this.hammer_cooldown === 0) {
+      for (let i = 0; i < 20; i++) {
+        const angle = (i * 18) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y + 30, Math.cos(angle)*4.5, Math.sin(angle)*4.5, DEDEDE_YELLOW, 8, 1, false, this.team));
+      }
+      this.hammer_cooldown = 60;
+    }
+  }
+  phase3_dedede(player, bullets, particles) {
+    if (this.pattern_timer % 25 === 0) {
+      for (let i = 0; i < 24; i++) {
+        const angle = (i * 15 + this.pattern_timer * 3) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*5.5, Math.sin(angle)*5.5, DEDEDE_RED, 9, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 70 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 6, DEDEDE_RED, 15, 1, player, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 6, DEDEDE_RED, 15, 1, player, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 6, DEDEDE_RED, 15, 1, player, this.team));
+    }
+    if (this.pattern_timer % 110 === 0 && this.hammer_cooldown === 0) {
+      for (let i = 0; i < 24; i++) {
+        const angle = (i * 15) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y + 30, Math.cos(angle)*5, Math.sin(angle)*5, DEDEDE_YELLOW, 9, 1, false, this.team));
+      }
+      this.hammer_cooldown = 55;
+      for (let i = 0; i < 20; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y + 30, DEDEDE_YELLOW, randUniform(3, 7), angle, 22));
+      }
+    }
+    if (this.pattern_timer % 200 === 0) {
+      for (let x = 0; x < WIDTH; x += 70) {
+        bullets.push(new Bullet(x, -20, 0, 6.5, DEDEDE_BLUE, 14, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 170 === 0 && this.charge_cooldown === 0) {
+      this.target_x = WIDTH - 300;
+      this.target_y = player.y;
+      this.charge_cooldown = 100;
+    }
+  }
+
+  // ===== ZANGIEF patterns: grab dash + powerful close range =====
+  zangiefCore(player, bullets, particles, p) {
+    if (this.punch_cooldown > 0) this.punch_cooldown -= 1;
+
+    const dx = player.x - this.x, dy = player.y - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    if (this.dash_state === "dashing") {
+      const ddx = this.dash_target_x - this.x, ddy = this.dash_target_y - this.y;
+      const ddist = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
+      const step = Math.min(p.dashSpeed, ddist);
+      this.x += (ddx / ddist) * step;
+      this.y += (ddy / ddist) * step;
+      this.target_x = this.x; this.target_y = this.y;
+      this.dash_timer -= 1;
+
+      const gdx = player.x - this.x, gdy = player.y - this.y;
+      const gdist = Math.sqrt(gdx*gdx + gdy*gdy);
+      if (gdist < 62) {
+        // caught! devastating grab — target may be the player or an opposing boss
+        dealDamageTo(player, p.grabDamage, particles);
+        this.shakeRequest = 35;
+        for (let i = 0; i < 35; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(player.x, player.y, ZANGIEF_RED, randUniform(4, 9), angle, 30));
+        }
+        this.dash_state = "idle";
+        this.dash_timer = 0;
+        this.grab_cooldown = p.dashCooldownMax;
+      } else if (this.dash_timer <= 0 || ddist < 6) {
+        this.dash_state = "idle";
+        this.grab_cooldown = Math.floor(p.dashCooldownMax * 0.6);
+      }
+      return;
+    }
+
+    if (this.grab_cooldown > 0) {
+      this.grab_cooldown -= 1;
+    } else if (this.pattern_timer % 5 === 0) {
+      this.dash_state = "dashing";
+      this.dash_target_x = player.x;
+      this.dash_target_y = player.y;
+      // give the dash enough frames to actually cross the distance to the player,
+      // plus a small buffer since the player can keep moving while he charges in
+      this.dash_timer = Math.min(140, Math.ceil(dist / p.dashSpeed) + 15);
+      for (let i = 0; i < 15; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, ZANGIEF_HAIR, randUniform(3, 6), angle, 15));
+      }
+      return;
+    }
+
+    // close-range punch: staying near Zangief is punished hard
+    if (dist < p.closeRange && this.punch_cooldown === 0) {
+      for (let i = 0; i < 16; i++) {
+        const angle = (i * 22.5) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle) * 6, Math.sin(angle) * 6, ZANGIEF_RED, 10, p.punchDamage, false, this.team));
+      }
+      this.punch_cooldown = p.punchCooldownMax;
+      this.shakeRequest = 18;
+      for (let i = 0; i < 20; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, ORANGE, randUniform(3, 7), angle, 20));
+      }
+    }
+
+    // sparse ranged filler so he isn't harmless from afar
+    if (this.pattern_timer % p.rangedEvery === 0) {
+      const baseAngle = Math.atan2(dy, dx);
+      for (let i = -3; i <= 3; i++) {
+        const angle = baseAngle + i * 0.12;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle) * 3.5, Math.sin(angle) * 3.5, ZANGIEF_SKIN, 9, p.rangedDamage, false, this.team));
+      }
+    }
+  }
+  phase1_zangief(player, bullets, particles) {
+    this.zangiefCore(player, bullets, particles, {
+      dashCooldownMax: 200, dashSpeed: 16, grabDamage: 10,
+      punchCooldownMax: 70, punchDamage: 3, closeRange: 130,
+      rangedEvery: 90, rangedDamage: 1
+    });
+  }
+  phase2_zangief(player, bullets, particles) {
+    this.zangiefCore(player, bullets, particles, {
+      dashCooldownMax: 150, dashSpeed: 19, grabDamage: 12,
+      punchCooldownMax: 55, punchDamage: 3, closeRange: 150,
+      rangedEvery: 70, rangedDamage: 1
+    });
+  }
+  phase3_zangief(player, bullets, particles) {
+    this.zangiefCore(player, bullets, particles, {
+      dashCooldownMax: 110, dashSpeed: 22, grabDamage: 15,
+      punchCooldownMax: 40, punchDamage: 4, closeRange: 170,
+      rangedEvery: 55, rangedDamage: 1
+    });
+  }
+
+  // ===== LIWANCHA patterns: charge -> dash grappler, with a poise-break window =====
+  liwanchaCore(target, bullets, particles, p) {
+    const dx = target.x - this.x, dy = target.y - this.y;
+    const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+
+    if (this.liw_state === "dazed") {
+      // helpless: stunned, can't attack, just wobbles (see draw_liwancha)
+      this.liw_timer -= 1;
+      if (this.liw_timer <= 0) {
+        this.liw_state = "idle";
+        this.liw_cooldown = p.cooldownAfterDaze;
+      }
+      return;
+    }
+
+    if (this.liw_state === "charging") {
+      this.liw_timer -= 1;
+      if (this.liw_timer <= 0) {
+        // charge survived -> unleash the dash
+        this.liw_state = "dashing";
+        this.liw_dash_target_x = target.x;
+        this.liw_dash_target_y = target.y;
+        this.liw_timer = Math.min(90, Math.ceil(dist / p.dashSpeed) + 10);
+        this.poise_damage = 0;
+        this.shakeRequest = Math.max(this.shakeRequest, 25);
+        for (let i = 0; i < 25; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(this.x, this.y, LIWANCHA_AURA, randUniform(4, 9), angle, 20));
+        }
+      }
+      return;
+    }
+
+    if (this.liw_state === "dashing") {
+      const ddx = this.liw_dash_target_x - this.x, ddy = this.liw_dash_target_y - this.y;
+      const ddist = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
+      const step = Math.min(p.dashSpeed, ddist);
+      this.x += (ddx / ddist) * step;
+      this.y += (ddy / ddist) * step;
+      this.target_x = this.x; this.target_y = this.y;
+      this.liw_timer -= 1;
+
+      const gdx = target.x - this.x, gdy = target.y - this.y;
+      const gdist = Math.sqrt(gdx*gdx + gdy*gdy);
+      if (gdist < 65) {
+        // devastating dash hit — works against the player or an opposing boss
+        dealDamageTo(target, p.dashDamage, particles);
+        this.shakeRequest = 40;
+        for (let i = 0; i < 40; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(target.x, target.y, LIWANCHA_RED, randUniform(4, 10), angle, 32));
+        }
+        this.liw_state = "idle";
+        this.liw_timer = 0;
+        this.liw_cooldown = p.cooldownAfterHit;
+      } else if (this.liw_timer <= 0 || ddist < 6) {
+        this.liw_state = "idle";
+        this.liw_cooldown = Math.floor(p.cooldownAfterHit * 0.6);
+      }
+      return;
+    }
+
+    // idle
+    if (this.liw_cooldown > 0) {
+      this.liw_cooldown -= 1;
+    } else if (this.pattern_timer % 5 === 0) {
+      // telegraph the charge clearly so it can be punished/poise-broken
+      this.liw_state = "charging";
+      this.liw_timer = p.chargeDuration;
+      this.poise_damage = 0;
+      this.poise_threshold = p.poiseThreshold;
+      for (let i = 0; i < 15; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, LIWANCHA_GOLD, randUniform(2, 5), angle, 25));
+      }
+      return;
+    }
+
+    // sparse ranged filler so he isn't harmless from afar between charges
+    if (this.pattern_timer % p.rangedEvery === 0) {
+      const baseAngle = Math.atan2(dy, dx);
+      for (let i = -2; i <= 2; i++) {
+        const angle = baseAngle + i * 0.15;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle) * 4, Math.sin(angle) * 4, LIWANCHA_RED, 9, p.rangedDamage, false, this.team));
+      }
+    }
+  }
+  phase1_liwancha(target, bullets, particles) {
+    this.liwanchaCore(target, bullets, particles, {
+      chargeDuration: 55, dashSpeed: 17, dashDamage: 12,
+      cooldownAfterHit: 160, cooldownAfterDaze: 90,
+      poiseThreshold: Math.round(this.max_health * 0.06),
+      rangedEvery: 80, rangedDamage: 1
+    });
+  }
+  phase2_liwancha(target, bullets, particles) {
+    this.liwanchaCore(target, bullets, particles, {
+      chargeDuration: 45, dashSpeed: 20, dashDamage: 15,
+      cooldownAfterHit: 130, cooldownAfterDaze: 75,
+      poiseThreshold: Math.round(this.max_health * 0.05),
+      rangedEvery: 65, rangedDamage: 1
+    });
+  }
+  phase3_liwancha(target, bullets, particles) {
+    this.liwanchaCore(target, bullets, particles, {
+      chargeDuration: 35, dashSpeed: 24, dashDamage: 18,
+      cooldownAfterHit: 100, cooldownAfterDaze: 60,
+      poiseThreshold: Math.round(this.max_health * 0.045),
+      rangedEvery: 50, rangedDamage: 1
+    });
+  }
+
+  take_damage(damage, particles) {
+    if (this.invincible === 0) {
+      // heavily resistant while flashing through a phase transition —
+      // still chippable, just not a free burst window
+      const dmg = this.phase_transition ? Math.max(1, Math.round(damage * 0.25)) : damage;
+      this.health -= dmg;
+      this.invincible = 3;
+      this.flash = 5;
+      for (let i = 0; i < 5; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, YELLOW, randUniform(2, 5), angle, 20));
+      }
+
+      // liwancha poise-break: cumulative damage taken while charging can
+      // interrupt the charge into a helpless dazed state
+      if (this.type === "liwancha" && this.liw_state === "charging") {
+        this.poise_damage += dmg;
+        if (this.poise_damage >= this.poise_threshold) {
+          this.liw_state = "dazed";
+          this.liw_timer = 90;
+          this.poise_damage = 0;
+          this.shakeRequest = Math.max(this.shakeRequest, 20);
+          for (let i = 0; i < 25; i++) {
+            const angle = randUniform(0, Math.PI * 2);
+            particles.push(new Particle(this.x, this.y, WHITE, randUniform(3, 7), angle, 25));
+          }
+        }
+      }
+    }
+  }
+  draw(shake, ticks) {
+    if (this.type === "marx") this.draw_marx(shake, ticks);
+    else if (this.type === "dedede") this.draw_dedede(shake, ticks);
+    else if (this.type === "zangief") this.draw_zangief(shake, ticks);
+    else if (this.type === "liwancha") this.draw_liwancha(shake, ticks);
+    else this.draw_magolor(shake, ticks);
+
+    if (this.phase_transition) {
+      const x = this.x + shake[0], y = this.y + shake[1];
+      const flicker = Math.sin(ticks * 0.02) > 0;
+      ctx.fillStyle = flicker ? rgb(WHITE) : rgb(RED);
+      ctx.font = "26px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(`PHASE ${this.phase}!`, x, y - 85);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    }
+  }
+  draw_magolor(shake, ticks) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const color = this.flash > 0 ? WHITE : DARK_PURPLE;
+    const size = 50 + Math.sin(ticks * 0.003) * 5;
+
+    for (let i = 0; i < 6; i++) {
+      const angle = (i * 60 + ticks * 0.05) * Math.PI / 180;
+      const wx = x + Math.cos(angle) * (size + 20);
+      const wy = y + Math.sin(angle) * (size + 20);
+      ctx.fillStyle = rgb(PURPLE);
+      ctx.beginPath(); ctx.arc(wx, wy, 15, 0, Math.PI*2); ctx.fill();
+    }
+
+    ctx.fillStyle = rgb(color);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = rgb(PURPLE); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI*2); ctx.stroke();
+
+    const eyeOffset = 15;
+    ctx.fillStyle = rgb(YELLOW);
+    ctx.beginPath(); ctx.arc(x-eyeOffset, y-10, 12, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+eyeOffset, y-10, 12, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = rgb(RED);
+    ctx.beginPath(); ctx.arc(x-eyeOffset, y-10, 6, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x+eyeOffset, y-10, 6, 0, Math.PI*2); ctx.fill();
+  }
+  draw_marx(shake, ticks) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const bodyColor = this.flash > 0 ? WHITE : MARX_PINK;
+    const size = 45 + Math.sin(ticks * 0.004) * 4;
+
+    // bat-like wings
+    for (let side = -1; side <= 1; side += 2) {
+      const flap = Math.sin(ticks * 0.01) * 10;
+      ctx.fillStyle = rgb(MARX_HAT);
+      ctx.beginPath();
+      ctx.moveTo(x + side * size * 0.6, y - 5);
+      ctx.lineTo(x + side * (size + 35), y - 30 + flap);
+      ctx.lineTo(x + side * (size + 20), y + 10);
+      ctx.lineTo(x + side * (size + 30), y + 30 + flap);
+      ctx.lineTo(x + side * size * 0.6, y + 15);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = rgb(WHITE); ctx.lineWidth = 2;
+      ctx.stroke();
+    }
+
+    // jester hat
+    ctx.fillStyle = rgb(MARX_HAT);
+    ctx.beginPath();
+    ctx.moveTo(x - 10, y - size + 5);
+    ctx.lineTo(x, y - size - 35);
+    ctx.lineTo(x + 10, y - size + 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = rgb(YELLOW);
+    ctx.beginPath(); ctx.arc(x, y - size - 35, 5, 0, Math.PI*2); ctx.fill();
+
+    // round body
+    ctx.fillStyle = rgb(bodyColor);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = rgb(MARX_HAT); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI*2); ctx.stroke();
+
+    // diamond eyes
+    for (const side of [-1, 1]) {
+      const ex = x + side * 15, ey = y - 5;
+      ctx.fillStyle = rgb(YELLOW);
+      ctx.beginPath();
+      ctx.moveTo(ex, ey - 12); ctx.lineTo(ex + 8, ey); ctx.lineTo(ex, ey + 12); ctx.lineTo(ex - 8, ey);
+      ctx.closePath(); ctx.fill();
+      ctx.fillStyle = rgb(MARX_RED);
+      ctx.beginPath(); ctx.arc(ex, ey, 4, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  draw_dedede(shake, ticks) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const bodyColor = this.flash > 0 ? WHITE : DEDEDE_BLUE;
+    const size = 60 + Math.sin(ticks * 0.0025) * 4;
+
+    // round blue body
+    ctx.fillStyle = rgb(bodyColor);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = rgb(DEDEDE_DARKBLUE); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI*2); ctx.stroke();
+
+    // white belly (lower half, kept clear of the face)
+    ctx.fillStyle = rgb(WHITE);
+    ctx.beginPath(); ctx.ellipse(x, y + size*0.42, size*0.5, size*0.4, 0, 0, Math.PI*2); ctx.fill();
+
+    // crown/beak
+    ctx.fillStyle = rgb(DEDEDE_YELLOW);
+    ctx.beginPath();
+    ctx.moveTo(x - 22, y - size - 5);
+    ctx.lineTo(x - 10, y - size - 25);
+    ctx.lineTo(x, y - size - 5);
+    ctx.lineTo(x + 10, y - size - 25);
+    ctx.lineTo(x + 22, y - size - 5);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = rgb(DEDEDE_RED); ctx.lineWidth = 2; ctx.stroke();
+
+    // eyes (upper half of the face, clear of the belly)
+    ctx.fillStyle = rgb(WHITE);
+    ctx.beginPath(); ctx.arc(x - 20, y - size*0.35, 12, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 20, y - size*0.35, 12, 0, Math.PI*2); ctx.fill();
+    ctx.fillStyle = rgb(BLACK);
+    ctx.beginPath(); ctx.arc(x - 20, y - size*0.35, 5, 0, Math.PI*2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 20, y - size*0.35, 5, 0, Math.PI*2); ctx.fill();
+
+    // small orange beak between the eyes
+    ctx.fillStyle = "rgb(255,140,0)";
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y - size*0.12);
+    ctx.lineTo(x + 8, y - size*0.12);
+    ctx.lineTo(x, y + size*0.02);
+    ctx.closePath(); ctx.fill();
+
+    // hammer floating beside him
+    const hammerAngle = Math.sin(ticks * 0.003) * 0.3;
+    const hx = x - size - 25, hy = y + Math.sin(ticks * 0.003) * 10;
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.rotate(hammerAngle);
+    ctx.fillStyle = "rgb(139,90,43)";
+    ctx.fillRect(-3, -25, 6, 50);
+    ctx.fillStyle = rgb(DEDEDE_RED);
+    ctx.fillRect(-18, -25, 36, 22);
+    ctx.strokeStyle = rgb(BLACK); ctx.lineWidth = 2;
+    ctx.strokeRect(-18, -25, 36, 22);
+    ctx.restore();
+  }
+  draw_zangief(shake, ticks) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const bodyColor = this.flash > 0 ? WHITE : ZANGIEF_SKIN;
+    const size = 55 + Math.sin(ticks * 0.003) * 3;
+    const dashing = this.dash_state === "dashing";
+
+    // danger aura while charging a grab dash
+    if (dashing) {
+      ctx.strokeStyle = rgb(RED, 0.5 + 0.4 * Math.sin(ticks * 0.04));
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(x, y, size + 20, 0, Math.PI * 2); ctx.stroke();
+      for (let i = 0; i < 4; i++) {
+        const angle = (i * 90 + ticks * 0.2) * Math.PI / 180;
+        ctx.strokeStyle = rgb(RED, 0.5);
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(x - Math.cos(angle) * (size + 10), y - Math.sin(angle) * (size + 10));
+        ctx.lineTo(x - Math.cos(angle) * (size + 35), y - Math.sin(angle) * (size + 35));
+        ctx.stroke();
+      }
+    }
+
+    // giant fists
+    for (const side of [-1, 1]) {
+      const fx = x + side * (size + 14), fy = y + 8;
+      ctx.fillStyle = rgb(ZANGIEF_RED);
+      ctx.beginPath(); ctx.arc(fx - side * 15, fy, 11, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgb(ZANGIEF_SKIN);
+      ctx.beginPath(); ctx.arc(fx, fy, 21, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgb(ZANGIEF_DARK); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(fx, fy, 21, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    // head/torso
+    ctx.fillStyle = rgb(bodyColor);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(ZANGIEF_DARK); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.stroke();
+
+    // red mohawk
+    ctx.fillStyle = rgb(ZANGIEF_HAIR);
+    ctx.beginPath();
+    ctx.moveTo(x - 8, y - size + 10);
+    ctx.lineTo(x - 4, y - size - 18);
+    ctx.lineTo(x, y - size);
+    ctx.lineTo(x + 4, y - size - 22);
+    ctx.lineTo(x + 8, y - size + 10);
+    ctx.closePath(); ctx.fill();
+
+    // angry eyebrows
+    ctx.strokeStyle = rgb(ZANGIEF_HAIR); ctx.lineWidth = 5; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - 28, y - 16); ctx.lineTo(x - 8, y - 8); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 28, y - 16); ctx.lineTo(x + 8, y - 8); ctx.stroke();
+    ctx.lineCap = "butt";
+
+    // eyes
+    ctx.fillStyle = rgb(WHITE);
+    ctx.beginPath(); ctx.arc(x - 14, y - 2, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 14, y - 2, 7, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgb(BLACK);
+    ctx.beginPath(); ctx.arc(x - 14, y - 2, 3, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 14, y - 2, 3, 0, Math.PI * 2); ctx.fill();
+
+    // beard/mustache
+    ctx.fillStyle = rgb(ZANGIEF_HAIR);
+    ctx.beginPath();
+    ctx.ellipse(x, y + size * 0.4, size * 0.5, size * 0.3, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  draw_liwancha(shake, ticks) {
+    // original chibi grappler-archetype design: round body, simple canvas
+    // shapes only, not any specific copyrighted character's likeness
+    let x = this.x + shake[0], y = this.y + shake[1];
+    const bodyColor = this.flash > 0 ? WHITE : LIWANCHA_RED;
+    const size = 58 + Math.sin(ticks * 0.0028) * 3;
+    const charging = this.liw_state === "charging";
+    const dashing = this.liw_state === "dashing";
+    const dazed = this.liw_state === "dazed";
+
+    if (dazed) {
+      // helpless wobble while stunned
+      x += Math.sin(ticks * 0.03) * 6;
+    }
+
+    // charge aura: builds tension before the dash
+    if (charging) {
+      const pulse = 0.5 + 0.4 * Math.sin(ticks * 0.05);
+      ctx.strokeStyle = rgb(LIWANCHA_AURA, pulse);
+      ctx.lineWidth = 7;
+      ctx.beginPath(); ctx.arc(x, y, size + 18 + pulse * 8, 0, Math.PI * 2); ctx.stroke();
+      ctx.strokeStyle = rgb(LIWANCHA_GOLD, pulse * 0.7);
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, size + 30, 0, Math.PI * 2); ctx.stroke();
+    }
+    // dash motion trail
+    if (dashing) {
+      const ang = Math.atan2(this.liw_dash_target_y - y, this.liw_dash_target_x - x);
+      for (let i = 1; i <= 3; i++) {
+        ctx.fillStyle = rgb(LIWANCHA_RED, 0.15 * (4 - i));
+        ctx.beginPath();
+        ctx.arc(x - Math.cos(ang) * i * 22, y - Math.sin(ang) * i * 22, size * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    // thick trapezoid torso (grappler build)
+    ctx.fillStyle = rgb(LIWANCHA_BLACK);
+    ctx.beginPath();
+    ctx.moveTo(x - size * 0.55, y + size * 0.75);
+    ctx.lineTo(x + size * 0.55, y + size * 0.75);
+    ctx.lineTo(x + size * 0.4, y + size * 0.15);
+    ctx.lineTo(x - size * 0.4, y + size * 0.15);
+    ctx.closePath(); ctx.fill();
+
+    // round head/body
+    ctx.fillStyle = rgb(bodyColor);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(LIWANCHA_DARKRED); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.stroke();
+
+    // bold headband
+    ctx.fillStyle = rgb(LIWANCHA_GOLD);
+    ctx.fillRect(x - size, y - size * 0.15, size * 2, size * 0.22);
+    ctx.fillStyle = rgb(LIWANCHA_BLACK);
+    ctx.fillRect(x - size - 6, y - size * 0.1, 10, size * 0.55);
+
+    // giant blocky fists
+    for (const side of [-1, 1]) {
+      const fx = x + side * (size + 16), fy = y + 6;
+      ctx.fillStyle = rgb(LIWANCHA_BLACK);
+      ctx.beginPath(); ctx.arc(fx, fy, 24, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgb(LIWANCHA_GOLD); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(fx, fy, 24, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    if (dazed) {
+      // dizzy stars circling the head
+      for (let i = 0; i < 3; i++) {
+        const angle = (i * 120 + ticks * 0.15) * Math.PI / 180;
+        const sx = x + Math.cos(angle) * (size * 0.75);
+        const sy = y - size * 0.9 + Math.sin(angle) * 12;
+        ctx.fillStyle = rgb(YELLOW);
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(angle);
+        ctx.beginPath();
+        for (let k = 0; k < 5; k++) {
+          const a = (k * 144) * Math.PI / 180;
+          const px = Math.cos(a) * 7, py = Math.sin(a) * 7;
+          k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+        }
+        ctx.closePath(); ctx.fill();
+        ctx.restore();
+      }
+      // half-closed, dazed eyes
+      ctx.strokeStyle = rgb(BLACK); ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x - 20, y - 4); ctx.lineTo(x - 6, y - 4); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + 6, y - 4); ctx.lineTo(x + 20, y - 4); ctx.stroke();
+      ctx.lineCap = "butt";
+    } else {
+      // fierce eyes
+      ctx.fillStyle = rgb(WHITE);
+      ctx.beginPath(); ctx.arc(x - 16, y - 4, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 16, y - 4, 8, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgb(BLACK);
+      ctx.beginPath(); ctx.arc(x - 16, y - 4, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 16, y - 4, 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = rgb(LIWANCHA_DARKRED); ctx.lineWidth = 4; ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(x - 26, y - 18); ctx.lineTo(x - 8, y - 10); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(x + 26, y - 18); ctx.lineTo(x + 8, y - 10); ctx.stroke();
+      ctx.lineCap = "butt";
+    }
+
+    // clenched-jaw mouth
+    ctx.strokeStyle = rgb(LIWANCHA_DARKRED); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(x - 12, y + size * 0.45); ctx.lineTo(x + 12, y + size * 0.45); ctx.stroke();
+
+    if (charging) {
+      ctx.fillStyle = rgb(WHITE);
+      ctx.font = "18px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("차지 중...", x, y - size - 45);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    } else if (dazed) {
+      ctx.fillStyle = rgb(YELLOW);
+      ctx.font = "16px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("기절!", x, y - size - 45);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    }
+  }
+}
+
+// ---------- Effect ----------
+class Effect {
+  constructor(x, y, type, duration = 30) {
+    this.x = x; this.y = y; this.type = type;
+    this.duration = duration; this.max_duration = duration;
+    this.size = 0;
+  }
+  update() {
+    this.duration -= 1;
+    if (this.type === "explosion") {
+      this.size = (1 - this.duration / this.max_duration) * 80;
+    }
+    return this.duration > 0;
+  }
+  draw(shake) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    if (this.type === "explosion") {
+      const alpha = this.duration / this.max_duration;
+      ctx.fillStyle = `rgb(255,${Math.floor(200*alpha)},0)`;
+      ctx.beginPath(); ctx.arc(x, y, this.size, 0, Math.PI*2); ctx.fill();
+      ctx.strokeStyle = rgb(YELLOW); ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.arc(x, y, this.size, 0, Math.PI*2); ctx.stroke();
+    }
+  }
+}
+
+// ---------- UI ----------
+const UI = {
+  draw_health(player) {
+    const bw = 300, bh = 28;
+    const x = 30, y = HEIGHT - 65;
+
+    ctx.fillStyle = "rgb(50,50,50)";
+    ctx.fillRect(x, y, bw, bh);
+
+    const ratio = Math.max(0, player.health / player.max_health);
+    const hw = Math.floor(ratio * bw);
+    const color = ratio > 0.5 ? [80,220,100] : (ratio > 0.25 ? YELLOW : RED);
+    ctx.fillStyle = rgb(color);
+    ctx.fillRect(x, y, hw, bh);
+
+    ctx.strokeStyle = rgb(WHITE); ctx.lineWidth = 3;
+    ctx.strokeRect(x, y, bw, bh);
+
+    ctx.fillStyle = rgb(WHITE);
+    ctx.font = "22px sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText("KIRBY", x, y - 8);
+
+    ctx.font = "16px sans-serif";
+    ctx.textAlign = "center"; ctx.textBaseline = "middle";
+    ctx.fillStyle = rgb(WHITE);
+    ctx.fillText(`${player.health} / ${player.max_health}`, x + bw/2, y + bh/2);
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+  },
+  draw_boss_health(boss, row = 0, side = "right") {
+    // stacked, more compact bars when several bosses are on screen at once.
+    // ally-team bars draw on the left (kept clear of the player's own bar),
+    // enemy-team bars draw on the right (their usual spot).
+    const bw = 380, bh = 24;
+    const x = side === "left" ? 30 : WIDTH - bw - 30;
+    const y = side === "left" ? 24 + row * 48 : 24 + row * 48;
+    ctx.fillStyle = "rgb(50,50,50)";
+    ctx.fillRect(x, y, bw, bh);
+    const hw = Math.floor(Math.max(0, boss.health / boss.max_health) * bw);
+    let color = boss.phase === 1 ? PURPLE : (boss.phase === 2 ? ORANGE : RED);
+    ctx.fillStyle = rgb(color);
+    ctx.fillRect(x, y, hw, bh);
+    ctx.strokeStyle = rgb(WHITE); ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, bw, bh);
+    ctx.fillStyle = rgb(WHITE);
+    ctx.font = "18px sans-serif";
+    ctx.textBaseline = "alphabetic";
+    ctx.fillText(boss.name, x, y - 6);
+  },
+  draw_charge(player) {
+    const x = 30, y = HEIGHT - 100, bw = 200, bh = 15;
+    ctx.fillStyle = "rgb(50,50,50)";
+    ctx.fillRect(x, y, bw, bh);
+    const cw = Math.floor((player.charge / player.max_charge) * bw);
+    const color = player.charge >= player.max_charge ? CYAN : BLUE;
+    ctx.fillStyle = rgb(color);
+    ctx.fillRect(x, y, cw, bh);
+    ctx.strokeStyle = rgb(WHITE); ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, bw, bh);
+  }
+};
+
+// ---------- Game ----------
+const BOSS_ORDER = ["magolor", "marx", "dedede", "zangief", "liwancha"];
+
+class Game {
+  constructor() {
+    this.player = new Player();
+    this.bosses = [];
+    this.bullets = [];
+    this.particles = [];
+    this.effects = [];
+
+    this.shake_offset = [0, 0];
+    this.shake_duration = 0;
+
+    this.state = "select";
+    this.selectedIndex = 0;
+    // which boss indices are queued up for the next fight — multiple can be
+    // picked at once for a simultaneous multi-boss battle
+    this.selectedSet = new Set();
+    // team ('ally' | 'enemy') for each selected boss index; defaults to 'enemy'
+    // (fights the player, as in the original single-team game) when unset
+    this.selectedTeams = new Map();
+    this.spectatorMode = false;
+    this.hadAllies = false;
+    this.outcomeText = null;
+    // brief lockout so a key still held from the previous run (e.g. Z while shooting)
+    // doesn't immediately re-toggle/start a fight the instant we land back on this screen
+    this.select_cooldown = 30;
+    this.intro_timer = 180;
+    this.victory_timer = 0;
+    this.game_over_timer = 0;
+
+    this.bg_stars = [];
+    for (let i = 0; i < 100; i++) {
+      this.bg_stars.push([randInt(0, WIDTH), randInt(0, HEIGHT), randInt(1, 3)]);
+    }
+  }
+  toggleSelect(idx) {
+    if (this.selectedSet.has(idx)) this.selectedSet.delete(idx);
+    else this.selectedSet.add(idx);
+  }
+  toggleTeam(idx) {
+    const current = this.selectedTeams.get(idx) || "enemy";
+    this.selectedTeams.set(idx, current === "enemy" ? "ally" : "enemy");
+  }
+  startBattle() {
+    if (this.selectedSet.size === 0) return;
+    const chosen = BOSS_ORDER.map((_, i) => i).filter(i => this.selectedSet.has(i));
+    const allies = chosen.filter(idx => (this.selectedTeams.get(idx) || "enemy") === "ally");
+    const enemies = chosen.filter(idx => (this.selectedTeams.get(idx) || "enemy") !== "ally");
+
+    const makeBoss = (idx, i, n, team) => {
+      const boss = new Boss(BOSS_ORDER[idx], team);
+      // spread multiple bosses out vertically (and stagger x a little) so
+      // they don't all spawn stacked on top of each other. Allies spawn on
+      // the left of the arena, enemies on the right, mirroring the player's
+      // own left-side starting position.
+      boss.y = (HEIGHT * (i + 1)) / (n + 1);
+      boss.target_y = boss.y;
+      if (team === "ally") {
+        boss.x = 180 + (i % 2) * 140;
+      } else {
+        boss.x = WIDTH - 180 - (i % 2) * 140;
+      }
+      boss.target_x = boss.x;
+      return boss;
+    };
+
+    this.bosses = [
+      ...allies.map((idx, i) => makeBoss(idx, i, allies.length, "ally")),
+      ...enemies.map((idx, i) => makeBoss(idx, i, enemies.length, "enemy"))
+    ];
+    this.hadAllies = allies.length > 0;
+    this.state = "intro";
+    this.intro_timer = 180;
+  }
+  add_shake(intensity) { this.shake_duration = intensity; }
+  update_shake() {
+    if (this.shake_duration > 0) {
+      this.shake_offset = [randInt(-8, 8), randInt(-8, 8)];
+      this.shake_duration -= 1;
+    } else {
+      this.shake_offset = [0, 0];
+    }
+  }
+  handle_collisions() {
+    const p = this.player;
+    const playerRect = {x: p.x-20, y: p.y-20, w: 40, h: 40};
+    const bossHits = this.bosses.map(b => ({boss: b, rect: {x: b.x-45, y: b.y-45, w: 90, h: 90}}));
+
+    // Team routing:
+    // - player bullets (is_player) only damage 'enemy'-team bosses.
+    // - an 'enemy'-team boss's bullets are hostile to the player AND to 'ally'-team bosses.
+    // - an 'ally'-team boss's bullets are hostile only to 'enemy'-team bosses (never the
+    //   player, never other allies).
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const bullet = this.bullets[i];
+      const br = {x: bullet.x - bullet.size, y: bullet.y - bullet.size, w: bullet.size*2, h: bullet.size*2};
+
+      if (bullet.is_player) {
+        let hit = false;
+        for (const {boss, rect} of bossHits) {
+          if (boss.team !== "enemy") continue;
+          if (rectsOverlap(rect, br)) {
+            boss.take_damage(bullet.damage, this.particles);
+            this.effects.push(new Effect(bullet.x, bullet.y, "explosion", 15));
+            this.bullets.splice(i, 1);
+            hit = true;
+            break;
+          }
+        }
+        if (hit) continue;
+      } else {
+        // hostile boss bullet: figure out which sides it can hit from its team tag
+        let hit = false;
+        if (bullet.team === "enemy") {
+          if (!this.spectatorMode && rectsOverlap(playerRect, br)) {
+            if (this.player.take_damage(this.particles, bullet.damage || 1)) {
+              this.add_shake(15);
+            }
+            this.bullets.splice(i, 1);
+            hit = true;
+          }
+          if (!hit) {
+            for (const {boss, rect} of bossHits) {
+              if (boss.team !== "ally") continue;
+              if (rectsOverlap(rect, br)) {
+                boss.take_damage(bullet.damage, this.particles);
+                this.effects.push(new Effect(bullet.x, bullet.y, "explosion", 15));
+                this.bullets.splice(i, 1);
+                hit = true;
+                break;
+              }
+            }
+          }
+        } else {
+          // ally-team bullet: only threatens enemy-team bosses
+          for (const {boss, rect} of bossHits) {
+            if (boss.team !== "enemy") continue;
+            if (rectsOverlap(rect, br)) {
+              boss.take_damage(bullet.damage, this.particles);
+              this.effects.push(new Effect(bullet.x, bullet.y, "explosion", 15));
+              this.bullets.splice(i, 1);
+              hit = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+  }
+  update() {
+    if (this.state === "select") {
+      if (this.select_cooldown > 0) {
+        this.select_cooldown -= 1;
+      } else if (keys.left) {
+        this.selectedIndex = (this.selectedIndex + BOSS_ORDER.length - 1) % BOSS_ORDER.length;
+        this.select_cooldown = 12;
+      } else if (keys.right) {
+        this.selectedIndex = (this.selectedIndex + 1) % BOSS_ORDER.length;
+        this.select_cooldown = 12;
+      } else if (keys.z) {
+        this.toggleSelect(this.selectedIndex);
+        this.select_cooldown = 14;
+      } else if (keys.shift) {
+        // flip the currently-cursored card between 적(enemy)/아군(ally)
+        this.toggleTeam(this.selectedIndex);
+        this.select_cooldown = 14;
+      } else if (keys.x) {
+        this.startBattle();
+        this.select_cooldown = 14;
+      }
+      return;
+    } else if (this.state === "intro") {
+      this.intro_timer -= 1;
+      if (this.intro_timer <= 0) this.state = "playing";
+    } else if (this.state === "playing") {
+      if (!this.spectatorMode) {
+        this.player.update(keys);
+
+        // only pause firing during a deliberate focus-dodge (Shift), not for the
+        // whole post-hit invincibility window — getting tagged by a stray bullet
+        // shouldn't stall your rapid-fire for a second and a half
+        if (keys.z && !this.player.bang) {
+          this.player.shoot(this.bullets, this.particles);
+        }
+        if (keys.x) {
+          if (this.player.charge_shot(this.bullets, this.particles)) this.add_shake(20);
+        }
+      } else {
+        // spectator mode: the player sits out entirely, invulnerable and non-interactive
+        this.player.health = this.player.max_health;
+      }
+      for (const boss of this.bosses) {
+        boss.update(this.player, this.bullets, this.particles, this.bosses);
+        if (boss.shakeRequest) {
+          this.add_shake(boss.shakeRequest);
+          boss.shakeRequest = 0;
+        }
+      }
+
+      compact(this.bullets, bl => bl instanceof Wing ? bl.update(bl.homeBoss ? bl.homeBoss.x : this.player.x, bl.homeBoss ? bl.homeBoss.y : this.player.y) : bl.update());
+      compact(this.particles, pt => pt.update());
+      compact(this.effects, ef => ef.update());
+
+      // hard safety caps: prevents a runaway spawn burst from ballooning
+      // memory/CPU use if something ever spawns faster than it clears
+      if (this.bullets.length > 500) this.bullets.splice(0, this.bullets.length - 500);
+      if (this.particles.length > 350) this.particles.splice(0, this.particles.length - 350);
+      if (this.effects.length > 100) this.effects.splice(0, this.effects.length - 100);
+
+      this.handle_collisions();
+
+      // clear out any boss that just died, with a fitting bang
+      for (let i = this.bosses.length - 1; i >= 0; i--) {
+        if (this.bosses[i].health <= 0) {
+          const b = this.bosses[i];
+          for (let k = 0; k < 40; k++) {
+            const angle = randUniform(0, Math.PI * 2);
+            this.particles.push(new Particle(b.x, b.y, choice([YELLOW, ORANGE, WHITE]), randUniform(4, 10), angle, 35));
+          }
+          this.effects.push(new Effect(b.x, b.y, "explosion", 30));
+          this.add_shake(25);
+          this.bosses.splice(i, 1);
+        }
+      }
+
+      // victory/defeat are decided purely by which team's bosses remain:
+      // victory needs no 'enemy'-team bosses left (allies + player surviving
+      // is fine); non-spectator defeat is the player dying; spectator mode
+      // additionally resolves a pure ally-vs-enemy wipeout either way.
+      const enemiesLeft = this.bosses.some(b => b.team === "enemy");
+      const alliesLeft = this.bosses.some(b => b.team === "ally");
+      if (!this.spectatorMode && this.player.health <= 0) {
+        this.state = "game_over";
+        this.game_over_timer = 120;
+        this.outcomeText = null;
+      } else if (!enemiesLeft) {
+        this.state = "victory";
+        this.victory_timer = 180;
+        this.outcomeText = this.spectatorMode ? "아군 팀 승리!" : null;
+      } else if (this.spectatorMode && this.hadAllies && !alliesLeft) {
+        this.state = "game_over";
+        this.game_over_timer = 120;
+        this.outcomeText = "적 팀 승리!";
+      }
+    } else if (this.state === "victory") {
+      this.victory_timer -= 1;
+      if (this.victory_timer > 0 && this.victory_timer % 10 === 0) {
+        for (let i = 0; i < 5; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          this.particles.push(new Particle(WIDTH/2, HEIGHT/2, choice([YELLOW, PINK, CYAN]), randUniform(5, 10), angle, 40));
+        }
+      }
+      compact(this.particles, pt => pt.update());
+      if (this.victory_timer <= 0) {
+        Object.assign(this, new Game());
+      }
+    } else if (this.state === "game_over") {
+      this.game_over_timer -= 1;
+      if (this.game_over_timer <= 0) {
+        Object.assign(this, new Game());
+      }
+    }
+    this.update_shake();
+  }
+  draw_background() {
+    ctx.fillStyle = "rgb(10,5,30)";
+    ctx.fillRect(0, 0, WIDTH, HEIGHT);
+    const ticks = performance.now();
+    for (const [sx, sy, size] of this.bg_stars) {
+      const xOffset = (ticks * 0.01 * size) % WIDTH;
+      const newX = (sx + xOffset) % WIDTH;
+      const cv = 150 + size * 30;
+      ctx.fillStyle = `rgb(${cv},${cv},${cv})`;
+      ctx.beginPath(); ctx.arc(newX, sy, size, 0, Math.PI*2); ctx.fill();
+    }
+  }
+  draw() {
+    const ticks = performance.now();
+    this.draw_background();
+
+    if (this.state === "select") {
+      // boss-select is rendered as an HTML overlay; canvas just shows the starfield
+    } else if (this.state === "intro") {
+      for (const boss of this.bosses) boss.draw(this.shake_offset, ticks);
+      ctx.fillStyle = rgb(WHITE);
+      ctx.font = this.bosses.length > 1 ? "36px sans-serif" : "48px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      const names = this.bosses.map(b => b.name).join(", ");
+      const verb = this.bosses.length > 1 ? "APPEAR!" : "APPEARS!";
+      ctx.fillText(`${names} ${verb}`, WIDTH/2, HEIGHT/2);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    } else if (this.state === "playing") {
+      if (!this.spectatorMode) this.player.draw(this.shake_offset);
+      for (const boss of this.bosses) boss.draw(this.shake_offset, ticks);
+      for (const bl of this.bullets) bl.draw(this.shake_offset);
+      for (const pt of this.particles) pt.draw(this.shake_offset);
+      for (const ef of this.effects) ef.draw(this.shake_offset);
+
+      if (!this.spectatorMode) UI.draw_health(this.player);
+      let leftRow = 0, rightRow = 0;
+      for (const boss of this.bosses) {
+        if (boss.team === "ally") UI.draw_boss_health(boss, leftRow++, "left");
+        else UI.draw_boss_health(boss, rightRow++, "right");
+      }
+      if (!this.spectatorMode) UI.draw_charge(this.player);
+    } else if (this.state === "victory") {
+      if (!this.spectatorMode) this.player.draw(this.shake_offset);
+      for (const pt of this.particles) pt.draw(this.shake_offset);
+
+      ctx.fillStyle = rgb(YELLOW);
+      ctx.font = "48px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText("VICTORY!", WIDTH/2, HEIGHT/2 - 50);
+      ctx.fillStyle = rgb(WHITE);
+      ctx.font = "36px sans-serif";
+      ctx.fillText(this.outcomeText || "Kirby saves the day!", WIDTH/2, HEIGHT/2 + 20);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    } else if (this.state === "game_over") {
+      ctx.fillStyle = rgb(BLACK);
+      ctx.fillRect(0, 0, WIDTH, HEIGHT);
+      ctx.fillStyle = rgb(RED);
+      ctx.font = "48px sans-serif";
+      ctx.textAlign = "center"; ctx.textBaseline = "middle";
+      ctx.fillText(this.outcomeText ? this.outcomeText.toUpperCase() : "GAME OVER", WIDTH/2, HEIGHT/2);
+      ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    }
+  }
+}
+
+function rectsOverlap(a, b) {
+  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+}
+
+// Updates each item in-place and drops dead ones without allocating a new
+// array every frame (unlike .filter()) — keeps GC pressure down over long
+// play sessions, which is what causes a canvas game to gradually slow down.
+function compact(arr, updateFn) {
+  let write = 0;
+  for (let read = 0; read < arr.length; read++) {
+    const item = arr[read];
+    if (updateFn(item)) {
+      arr[write++] = item;
+    }
+  }
+  arr.length = write;
+  return arr;
+}
+
+// ---------- boss select UI ----------
+const bossSelectEl = document.getElementById("boss-select");
+const bossCards = Array.from(document.querySelectorAll(".boss-card"));
+const teamToggleBtns = Array.from(document.querySelectorAll(".team-toggle"));
+const startBattleBtn = document.getElementById("start-battle-btn");
+const spectatorCheckbox = document.getElementById("spectator-checkbox");
+
+// ---------- main loop ----------
+let game = new Game();
+
+bossCards.forEach(card => {
+  card.addEventListener("click", () => {
+    if (game.state !== "select") return;
+    const idx = parseInt(card.dataset.index, 10);
+    game.selectedIndex = idx;
+    game.toggleSelect(idx);
+  });
+  card.addEventListener("keydown", (e) => {
+    if (game.state !== "select") return;
+    if (e.code === "Enter" || e.code === "Space") {
+      e.preventDefault();
+      const idx = parseInt(card.dataset.index, 10);
+      game.selectedIndex = idx;
+      game.toggleSelect(idx);
+    }
+  });
+});
+teamToggleBtns.forEach(btn => {
+  btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (game.state !== "select") return;
+    const idx = parseInt(btn.dataset.teamIndex, 10);
+    game.toggleTeam(idx);
+  });
+});
+startBattleBtn.addEventListener("click", () => {
+  if (game.state !== "select") return;
+  game.startBattle();
+});
+if (spectatorCheckbox) {
+  spectatorCheckbox.addEventListener("change", () => {
+    game.spectatorMode = spectatorCheckbox.checked;
+  });
+}
+
+let lastSyncedState = null;
+let lastSyncedIndex = -1;
+let lastSyncedPicked = "";
+let lastSyncedTeams = "";
+function syncBossSelectUI() {
+  // only touch the DOM when something actually changed — writing the same
+  // style/class every single animation frame forces needless style work
+  const showSelect = game.state === "select";
+  if (game.state !== lastSyncedState) {
+    bossSelectEl.style.display = showSelect ? "flex" : "none";
+    if (showSelect && spectatorCheckbox) spectatorCheckbox.checked = game.spectatorMode;
+    lastSyncedState = game.state;
+  }
+  if (!showSelect) return;
+
+  if (game.selectedIndex !== lastSyncedIndex) {
+    bossCards.forEach((card, i) => {
+      card.classList.toggle("selected", i === game.selectedIndex);
+    });
+    lastSyncedIndex = game.selectedIndex;
+  }
+
+  const pickedKey = BOSS_ORDER.map((_, i) => game.selectedSet.has(i) ? "1" : "0").join("");
+  if (pickedKey !== lastSyncedPicked) {
+    bossCards.forEach((card, i) => {
+      card.classList.toggle("picked", game.selectedSet.has(i));
+    });
+    const n = game.selectedSet.size;
+    startBattleBtn.disabled = n === 0;
+    startBattleBtn.textContent = n === 0 ? "전투 시작 (0명 선택됨)" : `전투 시작 (${n}명 선택됨)`;
+    lastSyncedPicked = pickedKey;
+  }
+
+  const teamsKey = BOSS_ORDER.map((_, i) => (game.selectedTeams.get(i) || "enemy")).join(",");
+  if (teamsKey !== lastSyncedTeams) {
+    BOSS_ORDER.forEach((_, i) => {
+      const team = game.selectedTeams.get(i) || "enemy";
+      const card = bossCards[i];
+      const btn = teamToggleBtns[i];
+      card.classList.toggle("team-ally", team === "ally");
+      card.classList.toggle("team-enemy", team === "enemy");
+      if (btn) {
+        btn.classList.toggle("team-ally", team === "ally");
+        btn.textContent = team === "ally" ? "아군(ALLY)" : "적(ENEMY)";
+      }
+    });
+    lastSyncedTeams = teamsKey;
+  }
+}
+
+function loop() {
+  game.update();
+  game.draw();
+  syncBossSelectUI();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+})();
+</script>
+</body>
+</html>
