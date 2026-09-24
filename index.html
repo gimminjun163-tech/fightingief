@@ -319,6 +319,38 @@
         <button class="team-toggle" type="button" data-team-index="4">적(ENEMY)</button>
         <button class="minus-btn" type="button" data-minus-index="4" title="한 명 빼기">−</button>
       </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="taranza" data-index="5">
+        <div class="count-badge" data-count-badge="5" style="display:none;">x0</div>
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #28063c, #d876db);"></div>
+        <div class="name">TARANZA<br>타란자</div>
+        <div class="desc">거미줄 인형사<br>거미줄 함정 + 유도 거미</div>
+        <button class="team-toggle" type="button" data-team-index="5">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="5" title="한 명 빼기">−</button>
+      </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="sectonia" data-index="6">
+        <div class="count-badge" data-count-badge="6" style="display:none;">x0</div>
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #93149c, #ffcd28);"></div>
+        <div class="name">QUEEN SECTONIA<br>세크토니아</div>
+        <div class="desc">환영의 여왕<br>분신 + 광선 소사</div>
+        <button class="team-toggle" type="button" data-team-index="6">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="6" title="한 명 빼기">−</button>
+      </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="darkmeta" data-index="7">
+        <div class="count-badge" data-count-badge="7" style="display:none;">x0</div>
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #16163a, #8c3cdc);"></div>
+        <div class="name">MASKED META KNIGHT<br>마스크 메타나이트</div>
+        <div class="desc">초고속 난무 검사<br>연속 순간 베기 + 검기</div>
+        <button class="team-toggle" type="button" data-team-index="7">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="7" title="한 명 빼기">−</button>
+      </div>
+      <div class="boss-card" role="button" tabindex="0" data-boss="darkdedede" data-index="8">
+        <div class="count-badge" data-count-badge="8" style="display:none;">x0</div>
+        <div class="swatch" style="background: radial-gradient(circle at 35% 35%, #190f2e, #aa0a0a);"></div>
+        <div class="name">MASKED DEDEDE<br>마스크 디디디</div>
+        <div class="desc">오염된 대왕<br>강화 망치 + 돌진 태클</div>
+        <button class="team-toggle" type="button" data-team-index="8">적(ENEMY)</button>
+        <button class="minus-btn" type="button" data-minus-index="8" title="한 명 빼기">−</button>
+      </div>
     </div>
     <button id="start-battle-btn" disabled>전투 시작 (0명 선택됨)</button>
     <div id="spectator-row"><label><input type="checkbox" id="spectator-checkbox"> 관전 모드 (플레이어 없이 보스끼리 대결 관전)</label></div>
@@ -329,7 +361,7 @@
   <b>이동</b> <span class="key">방향키</span> / <span class="key">WASD</span> &nbsp;·&nbsp;
   <b>공격</b> <span class="key">Z</span> &nbsp;·&nbsp;
   <b>차지샷 (모으기→발사)</b> <span class="key">X</span> &nbsp;·&nbsp;
-  <b>포커스(무적, 이동 느려짐)</b> <span class="key">Shift</span>
+  <b>포커스(무적, 이동 느려짐, 재사용 대기시간 있음)</b> <span class="key">Shift</span>
   <br>선택한 보스를 모두 쓰러뜨리면 승리합니다. 체력이 다하거나 승리하면 잠시 후 보스 선택 화면으로 돌아갑니다.
 </div>
 
@@ -370,6 +402,25 @@ const LIWANCHA_DARKRED = [90,10,16];
 const LIWANCHA_BLACK = [25,20,22];
 const LIWANCHA_GOLD = [230,180,60];
 const LIWANCHA_AURA = [255,60,40];
+const TARANZA_PURPLE = [106, 27, 154];
+const TARANZA_PINK = [216, 118, 219];
+const TARANZA_DARK = [40, 10, 60];
+const TARANZA_WEB = [225, 200, 255];
+const TARANZA_EYE = [255, 90, 200];
+const SECTONIA_PURPLE = [147, 20, 200];
+const SECTONIA_MAGENTA = [216, 20, 140];
+const SECTONIA_GOLD = [255, 205, 40];
+const SECTONIA_WING = [190, 90, 230];
+const DMK_BLUE = [22, 22, 55];
+const DMK_PURPLE = [70, 35, 110];
+const DMK_MASK = [170, 25, 35];
+const DMK_SILVER = [175, 175, 195];
+const DMK_GLOW = [140, 60, 220];
+const DDD_BLUE = [25, 20, 50];
+const DDD_PURPLE = [70, 15, 95];
+const DDD_RED = [170, 10, 10];
+const DDD_BLACK = [15, 10, 20];
+const DDD_GLOW = [200, 30, 200];
 
 function rgb(c, a) {
   if (a === undefined) {
@@ -524,6 +575,66 @@ class StarBullet extends Bullet {
   }
 }
 
+// web-string hazard: a stationary trap Taranza drops on the floor. Reuses
+// the normal Bullet collision path (team-routed hit detection, single-hit
+// removal) but never moves and expires after `life` frames on its own.
+// `snare` (frames) is picked up by Game.handle_collisions and applied to
+// the player as a brief movement slow if it connects.
+class WebZone extends Bullet {
+  constructor(x, y, color, size, damage, team, life, snare) {
+    super(x, y, 0, 0, color, size, damage, false, team);
+    this.life = life;
+    this.snare = snare || 0;
+    this.spin = 0;
+  }
+  update() {
+    this.life -= 1;
+    this.spin += 2;
+    return this.life > 0;
+  }
+  draw(shake) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(this.spin * Math.PI / 180);
+    ctx.strokeStyle = rgb(this.color, 0.8);
+    ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) {
+      const a = (i * 60) * Math.PI / 180;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(Math.cos(a) * this.size, Math.sin(a) * this.size);
+      ctx.stroke();
+    }
+    ctx.beginPath();
+    ctx.arc(0, 0, this.size * 0.6, 0, Math.PI * 2);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
+// crescent sword-beam bullet used by the masked/dark Meta Knight boss
+class CrescentBullet extends Bullet {
+  draw(shake) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const angle = Math.atan2(this.vy, this.vx);
+    ctx.save();
+    ctx.translate(x, y);
+    ctx.rotate(angle);
+    ctx.strokeStyle = rgb(this.color);
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.size, -0.9, 0.9);
+    ctx.stroke();
+    ctx.strokeStyle = rgb(this.glow);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, this.size + 3, -0.7, 0.7);
+    ctx.stroke();
+    ctx.restore();
+  }
+}
+
 // ---------- Wing ----------
 class Wing {
   constructor(x, y, angle, color, homeBoss = null, team = "enemy") {
@@ -589,10 +700,28 @@ class Player {
     this.shoot_cooldown = 0; this.charge_shot_cooldown = 0; this.hit_cooldown = 0;
     this.bang = 0;
     this.damage_clock = 0;
+    // focus/dodge (Shift) cooldown: once the invincibility+slow window ends,
+    // this counts down before Shift can trigger it again
+    this.focus_cooldown = 0;
+    this.focus_cooldown_max = 100;
+    // brief movement slow applied by e.g. Taranza's web traps
+    this.snared = 0;
   }
   update(k) {
-    const speed = (k.shift || this.bang) ? this.slow_speed : this.speed;
-    if (k.shift && this.invincible === 0) {
+    const speed = (k.shift || this.bang || this.snared > 0) ? this.slow_speed : this.speed;
+
+    // if the focus/dodge window ended as of the *previous* frame's decrement
+    // (invincible is 0 but bang is still set), start the cooldown now, before
+    // evaluating whether Shift should trigger a fresh one below — otherwise
+    // a Shift held continuously could see invincible===0 && focus_cooldown===0
+    // in the very same frame the cooldown was meant to begin, and chain
+    // straight into another invincibility window with no cooldown ever applied.
+    if (this.invincible === 0 && this.bang) {
+      this.bang = 0;
+      this.focus_cooldown = this.focus_cooldown_max;
+    }
+
+    if (k.shift && this.invincible === 0 && this.focus_cooldown === 0) {
       this.invincible = 250;
       this.bang = 1;
     }
@@ -605,7 +734,8 @@ class Player {
     this.y = Math.max(40, Math.min(HEIGHT - 40, this.y));
 
     if (this.invincible > 0) this.invincible -= 1;
-    else this.bang = 0;
+    if (this.focus_cooldown > 0) this.focus_cooldown -= 1;
+    if (this.snared > 0) this.snared -= 1;
 
     if (this.shoot_cooldown > 0) this.shoot_cooldown -= 1;
     if (this.charge_shot_cooldown > 0) this.charge_shot_cooldown -= 1;
@@ -710,7 +840,11 @@ const BOSS_CONFIGS = {
   marx:     { name: "MARX",    max_health: 650, desc: "마르크 — 빠르고 변칙적인 광대" },
   dedede:   { name: "KING DEDEDE", max_health: 900, desc: "디디디 대왕 — 묵직한 망치 공격" },
   zangief:  { name: "ZANGIEF", max_health: 1700, desc: "장기에프 — 압도적인 근접 그래플러" },
-  liwancha: { name: "LIWANCHA", max_health: 1700, desc: "리완차 — 묵직한 차지 격투가, 차지 돌진 + 기절 유발" }
+  liwancha: { name: "LIWANCHA", max_health: 1700, desc: "리완차 — 묵직한 차지 격투가, 차지 돌진 + 기절 유발" },
+  taranza:  { name: "TARANZA", max_health: 1300, desc: "타란자 — 거미줄 인형사, 거미줄 함정 + 유도 거미" },
+  sectonia: { name: "QUEEN SECTONIA", max_health: 1600, desc: "세크토니아 — 미모와 환영의 여왕, 분신 + 광선 소사" },
+  darkmeta: { name: "MASKED META KNIGHT", max_health: 1400, desc: "마스크 메타나이트 — 초고속 난무 검사, 연속 순간 베기" },
+  darkdedede: { name: "MASKED DEDEDE", max_health: 1800, desc: "마스크 디디디 — 오염된 대왕, 강화 망치 + 돌진 태클" }
 };
 
 // ---------- Boss ----------
@@ -754,6 +888,25 @@ class Boss {
     this.liw_cooldown = 120;
     this.poise_damage = 0; // accumulates while charging; reset on entering charging
     this.poise_threshold = Infinity; // set per-phase; if exceeded during charging -> dazed
+    // taranza-specific: web-trap cooldown
+    this.web_zone_cooldown = 0;
+    // sectonia-specific: mirror decoys + beam sweep
+    this.sect_decoys = [];
+    this.sect_decoy_timer = 0;
+    this.beam_timer = 0;
+    this.beam_angle = 0;
+    this.beam_cooldown = 0;
+    // dark meta knight-specific: dash-slash combo state machine
+    this.dmk_state = "idle"; // idle | dashing | recover
+    this.dmk_timer = 0;
+    this.dmk_combo = 0;
+    this.dmk_dash_target_x = this.x;
+    this.dmk_dash_target_y = this.y;
+    this.dmk_cooldown = 60;
+    // masked dedede-specific: dash tackle (reuses dash_state/dash_timer/dash_target_x/y)
+    // and a bigger hammer-smash cooldown
+    this.tackle_cooldown = 140;
+    this.big_hammer_cooldown = 0;
   }
   pickTarget(player, allBosses) {
     // nearest opponent: for an 'enemy' boss that's the player or any 'ally' boss;
@@ -805,6 +958,11 @@ class Boss {
     if (this.wing_attack_cooldown > 0) this.wing_attack_cooldown -= 1;
     if (this.hammer_cooldown > 0) this.hammer_cooldown -= 1;
     if (this.charge_cooldown > 0) this.charge_cooldown -= 1;
+    if (this.web_zone_cooldown > 0) this.web_zone_cooldown -= 1;
+    if (this.beam_cooldown > 0) this.beam_cooldown -= 1;
+    if (this.dmk_cooldown > 0) this.dmk_cooldown -= 1;
+    if (this.tackle_cooldown > 0) this.tackle_cooldown -= 1;
+    if (this.big_hammer_cooldown > 0) this.big_hammer_cooldown -= 1;
 
     const dy = this.target_y - this.y;
     this.y += dy * 0.05;
@@ -813,7 +971,7 @@ class Boss {
 
     const target = this.pickTarget(player, allBosses);
 
-    if (this.move_timer > 120 && this.dash_state !== "dashing" && this.liw_state !== "dashing") {
+    if (this.move_timer > 120 && this.dash_state !== "dashing" && this.liw_state !== "dashing" && this.dmk_state !== "dashing") {
       this.target_y = randInt(150, HEIGHT - 150);
       if (this.type === "marx") {
         this.target_x = randInt(Math.floor(WIDTH * 0.5), WIDTH - 120);
@@ -843,6 +1001,22 @@ class Boss {
       if (this.phase === 1) this.phase1_liwancha(target, bullets, particles);
       else if (this.phase === 2) this.phase2_liwancha(target, bullets, particles);
       else if (this.phase === 3) this.phase3_liwancha(target, bullets, particles);
+    } else if (this.type === "taranza") {
+      if (this.phase === 1) this.phase1_taranza(target, bullets, particles);
+      else if (this.phase === 2) this.phase2_taranza(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_taranza(target, bullets, particles);
+    } else if (this.type === "sectonia") {
+      if (this.phase === 1) this.phase1_sectonia(target, bullets, particles);
+      else if (this.phase === 2) this.phase2_sectonia(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_sectonia(target, bullets, particles);
+    } else if (this.type === "darkmeta") {
+      if (this.phase === 1) this.phase1_darkmeta(target, bullets, particles);
+      else if (this.phase === 2) this.phase2_darkmeta(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_darkmeta(target, bullets, particles);
+    } else if (this.type === "darkdedede") {
+      if (this.phase === 1) this.phase1_darkdedede(target, bullets, particles);
+      else if (this.phase === 2) this.phase2_darkdedede(target, bullets, particles);
+      else if (this.phase === 3) this.phase3_darkdedede(target, bullets, particles);
     }
 
     if (this.health <= Math.floor(this.max_health/3) * 2 && this.phase === 1) {
@@ -1287,6 +1461,372 @@ class Boss {
     });
   }
 
+  // ===== TARANZA patterns: web bursts + homing spiderlings + web traps =====
+  phase1_taranza(target, bullets, particles) {
+    if (this.pattern_timer % 55 === 0) {
+      for (let i = 0; i < 12; i++) {
+        const angle = (i * 30 + this.pattern_timer) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*3.5, Math.sin(angle)*3.5, TARANZA_WEB, 7, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 140 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 4.5, TARANZA_DARK, 10, 1, target, this.team));
+    }
+  }
+  phase2_taranza(target, bullets, particles) {
+    if (this.pattern_timer % 40 === 0) {
+      for (let i = 0; i < 16; i++) {
+        const angle = (i * 22.5 + this.pattern_timer * 1.5) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*4, Math.sin(angle)*4, TARANZA_PURPLE, 7, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 100 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 5, TARANZA_DARK, 10, 1, target, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 5, TARANZA_DARK, 10, 1, target, this.team));
+    }
+    if (this.pattern_timer % 170 === 0 && this.web_zone_cooldown === 0) {
+      // a telegraphed web trap dropped near the target's current position —
+      // brushing it briefly snares the player's movement
+      bullets.push(new WebZone(target.x, target.y, TARANZA_WEB, 32, 2, this.team, 150, 90));
+      this.web_zone_cooldown = 170;
+      for (let i = 0; i < 12; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(target.x, target.y, TARANZA_PINK, randUniform(2, 5), angle, 20));
+      }
+    }
+  }
+  phase3_taranza(target, bullets, particles) {
+    if (this.pattern_timer % 25 === 0) {
+      for (let i = 0; i < 20; i++) {
+        const angle = (i * 18 + this.pattern_timer * 2) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*4.5, Math.sin(angle)*4.5, TARANZA_PURPLE, 8, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 60 === 0) {
+      for (let i = 0; i < 3; i++) {
+        bullets.push(new HomingBullet(this.x, this.y, 5.5, TARANZA_DARK, 11, 1, target, this.team));
+      }
+    }
+    if (this.pattern_timer % 130 === 0 && this.web_zone_cooldown === 0) {
+      for (let k = 0; k < 2; k++) {
+        const tx = target.x + randUniform(-60, 60), ty = target.y + randUniform(-60, 60);
+        bullets.push(new WebZone(tx, ty, TARANZA_WEB, 34, 2, this.team, 160, 100));
+      }
+      this.web_zone_cooldown = 130;
+    }
+    if (this.pattern_timer % 220 === 0) {
+      // web curtain sweeping down from the top of the arena
+      for (let x = 0; x < WIDTH; x += 90) {
+        bullets.push(new Bullet(x, -20, 0, 6, TARANZA_WEB, 12, 1, false, this.team));
+      }
+    }
+  }
+
+  // ===== QUEEN SECTONIA patterns: mirror decoys + beam sweep =====
+  spawnSectoniaBurst(x, y, bullets, damage, team, color, count, spin) {
+    for (let i = 0; i < count; i++) {
+      const angle = (i * (360 / count) + spin) * Math.PI / 180;
+      bullets.push(new Bullet(x, y, Math.cos(angle)*4.2, Math.sin(angle)*4.2, color, 7, damage, false, team));
+    }
+  }
+  phase1_sectonia(target, bullets, particles) {
+    if (this.pattern_timer % 45 === 0) {
+      this.spawnSectoniaBurst(this.x, this.y, bullets, 1, this.team, SECTONIA_MAGENTA, 16, this.pattern_timer * 1.5);
+    }
+    if (this.pattern_timer % 110 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 5, SECTONIA_GOLD, 11, 1, target, this.team));
+    }
+  }
+  phase2_sectonia(target, bullets, particles) {
+    if (this.pattern_timer % 35 === 0) {
+      this.spawnSectoniaBurst(this.x, this.y, bullets, 1, this.team, SECTONIA_MAGENTA, 18, this.pattern_timer * 2);
+    }
+    if (this.pattern_timer % 90 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 5.5, SECTONIA_GOLD, 11, 1, target, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 5.5, SECTONIA_GOLD, 11, 1, target, this.team));
+    }
+    if (this.pattern_timer % 220 === 0) {
+      // summon mirror-image decoys around herself — their volleys deal no
+      // real damage, only the true queen is worth dodging carefully
+      this.sect_decoys = [
+        {x: this.x - 140, y: this.y - 80},
+        {x: this.x + 140, y: this.y + 80}
+      ];
+      this.sect_decoy_timer = 150;
+      for (const d of this.sect_decoys) {
+        for (let i = 0; i < 15; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(d.x, d.y, SECTONIA_WING, randUniform(2, 5), angle, 18));
+        }
+      }
+    }
+    if (this.sect_decoy_timer > 0) {
+      this.sect_decoy_timer -= 1;
+      if (this.pattern_timer % 35 === 0) {
+        for (const d of this.sect_decoys) {
+          this.spawnSectoniaBurst(d.x, d.y, bullets, 0, this.team, SECTONIA_WING, 10, this.pattern_timer * 2);
+        }
+      }
+      if (this.sect_decoy_timer <= 0) this.sect_decoys = [];
+    }
+    if (this.pattern_timer % 260 === 0 && this.beam_cooldown === 0) {
+      this.beam_timer = 80;
+      this.beam_angle = Math.atan2(target.y - this.y, target.x - this.x);
+      this.beam_cooldown = 260;
+    }
+    if (this.beam_timer > 0) {
+      this.beam_timer -= 1;
+      this.beam_angle += 0.035;
+      if (this.pattern_timer % 4 === 0) {
+        bullets.push(new Bullet(this.x, this.y, Math.cos(this.beam_angle)*11, Math.sin(this.beam_angle)*11, SECTONIA_GOLD, 6, 1, false, this.team));
+      }
+    }
+  }
+  phase3_sectonia(target, bullets, particles) {
+    if (this.pattern_timer % 22 === 0) {
+      this.spawnSectoniaBurst(this.x, this.y, bullets, 1, this.team, SECTONIA_PURPLE, 22, this.pattern_timer * 3);
+    }
+    if (this.pattern_timer % 70 === 0) {
+      for (let i = 0; i < 3; i++) {
+        bullets.push(new HomingBullet(this.x, this.y, 6, SECTONIA_GOLD, 12, 1, target, this.team));
+      }
+    }
+    if (this.pattern_timer % 190 === 0) {
+      this.sect_decoys = [
+        {x: this.x - 160, y: this.y - 100},
+        {x: this.x + 160, y: this.y - 60},
+        {x: this.x, y: this.y + 140}
+      ];
+      this.sect_decoy_timer = 160;
+    }
+    if (this.sect_decoy_timer > 0) {
+      this.sect_decoy_timer -= 1;
+      if (this.pattern_timer % 28 === 0) {
+        for (const d of this.sect_decoys) {
+          this.spawnSectoniaBurst(d.x, d.y, bullets, 0, this.team, SECTONIA_WING, 12, this.pattern_timer * 3);
+        }
+      }
+      if (this.sect_decoy_timer <= 0) this.sect_decoys = [];
+    }
+    if (this.pattern_timer % 210 === 0 && this.beam_cooldown === 0) {
+      this.beam_timer = 100;
+      this.beam_angle = Math.atan2(target.y - this.y, target.x - this.x);
+      this.beam_cooldown = 210;
+    }
+    if (this.beam_timer > 0) {
+      this.beam_timer -= 1;
+      this.beam_angle += 0.05;
+      if (this.pattern_timer % 3 === 0) {
+        bullets.push(new Bullet(this.x, this.y, Math.cos(this.beam_angle)*12, Math.sin(this.beam_angle)*12, SECTONIA_MAGENTA, 7, 1, false, this.team));
+      }
+    }
+  }
+
+  // ===== MASKED META KNIGHT patterns: teleport dash-slash combos + sword beams =====
+  darkMetaCore(target, bullets, particles, p) {
+    if (this.dmk_state === "recover") {
+      this.dmk_timer -= 1;
+      if (this.dmk_timer <= 0) { this.dmk_state = "idle"; this.dmk_cooldown = p.cooldownAfterCombo; }
+      return;
+    }
+    if (this.dmk_state === "dashing") {
+      const ddx = this.dmk_dash_target_x - this.x, ddy = this.dmk_dash_target_y - this.y;
+      const ddist = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
+      const step = Math.min(p.dashSpeed, ddist);
+      this.x += (ddx / ddist) * step;
+      this.y += (ddy / ddist) * step;
+      this.target_x = this.x; this.target_y = this.y;
+      this.dmk_timer -= 1;
+
+      const gdx = target.x - this.x, gdy = target.y - this.y;
+      const gdist = Math.sqrt(gdx*gdx + gdy*gdy);
+      if (gdist < 60) {
+        dealDamageTo(target, p.slashDamage, particles);
+        this.shakeRequest = Math.max(this.shakeRequest, 14);
+        for (let i = 0; i < 18; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(target.x, target.y, DMK_MASK, randUniform(3, 7), angle, 18));
+        }
+        this.dmk_combo += 1;
+        if (this.dmk_combo >= p.comboHits) {
+          this.dmk_state = "recover"; this.dmk_timer = 30; this.dmk_combo = 0;
+        } else {
+          // teleport-illusion into the next hit of the combo
+          this.dmk_dash_target_x = target.x + randUniform(-40, 40);
+          this.dmk_dash_target_y = target.y + randUniform(-40, 40);
+          this.dmk_timer = 20;
+          for (let i = 0; i < 10; i++) {
+            const angle = randUniform(0, Math.PI * 2);
+            particles.push(new Particle(this.x, this.y, DMK_GLOW, randUniform(2, 5), angle, 14));
+          }
+        }
+      } else if (this.dmk_timer <= 0 || ddist < 6) {
+        this.dmk_combo += 1;
+        if (this.dmk_combo >= p.comboHits) {
+          this.dmk_state = "recover"; this.dmk_timer = 30; this.dmk_combo = 0;
+        } else {
+          this.dmk_dash_target_x = target.x; this.dmk_dash_target_y = target.y;
+          this.dmk_timer = Math.min(50, Math.ceil(ddist / p.dashSpeed) + 10);
+        }
+      }
+      return;
+    }
+
+    if (this.dmk_cooldown > 0) {
+      this.dmk_cooldown -= 1;
+    } else if (this.pattern_timer % 5 === 0) {
+      this.dmk_state = "dashing";
+      this.dmk_combo = 0;
+      this.dmk_dash_target_x = target.x; this.dmk_dash_target_y = target.y;
+      const dx = target.x - this.x, dy = target.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      this.dmk_timer = Math.min(50, Math.ceil(dist / p.dashSpeed) + 10);
+      for (let i = 0; i < 12; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, DMK_PURPLE, randUniform(2, 5), angle, 14));
+      }
+      return;
+    }
+
+    if (this.beam_cooldown === 0 && this.pattern_timer % p.beamEvery === 0) {
+      const dx = target.x - this.x, dy = target.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      const bvx = (dx / dist) * 10, bvy = (dy / dist) * 10;
+      bullets.push(new CrescentBullet(this.x, this.y, bvx, bvy, DMK_GLOW, 14, p.beamDamage, false, this.team));
+      this.beam_cooldown = p.beamCooldown;
+    }
+  }
+  phase1_darkmeta(target, bullets, particles) {
+    this.darkMetaCore(target, bullets, particles, {
+      dashSpeed: 18, comboHits: 2, slashDamage: 4,
+      cooldownAfterCombo: 110, beamEvery: 70, beamDamage: 2, beamCooldown: 70
+    });
+  }
+  phase2_darkmeta(target, bullets, particles) {
+    this.darkMetaCore(target, bullets, particles, {
+      dashSpeed: 21, comboHits: 3, slashDamage: 4,
+      cooldownAfterCombo: 85, beamEvery: 55, beamDamage: 2, beamCooldown: 55
+    });
+  }
+  phase3_darkmeta(target, bullets, particles) {
+    this.darkMetaCore(target, bullets, particles, {
+      dashSpeed: 25, comboHits: 4, slashDamage: 5,
+      cooldownAfterCombo: 60, beamEvery: 40, beamDamage: 3, beamCooldown: 40
+    });
+  }
+
+  // ===== MASKED DEDEDE patterns: bigger hammer smashes + dash-charge tackle =====
+  darkDededeTackle(target, bullets, particles, p) {
+    if (this.dash_state === "dashing") {
+      const ddx = this.dash_target_x - this.x, ddy = this.dash_target_y - this.y;
+      const ddist = Math.sqrt(ddx*ddx + ddy*ddy) || 1;
+      const step = Math.min(p.dashSpeed, ddist);
+      this.x += (ddx / ddist) * step;
+      this.y += (ddy / ddist) * step;
+      this.target_x = this.x; this.target_y = this.y;
+      this.dash_timer -= 1;
+
+      const gdx = target.x - this.x, gdy = target.y - this.y;
+      const gdist = Math.sqrt(gdx*gdx + gdy*gdy);
+      if (gdist < 75) {
+        dealDamageTo(target, p.tackleDamage, particles);
+        this.shakeRequest = Math.max(this.shakeRequest, 30);
+        for (let i = 0; i < 30; i++) {
+          const angle = randUniform(0, Math.PI * 2);
+          particles.push(new Particle(target.x, target.y, DDD_RED, randUniform(4, 9), angle, 26));
+        }
+        this.dash_state = "idle"; this.dash_timer = 0;
+        this.tackle_cooldown = p.tackleCooldownMax;
+      } else if (this.dash_timer <= 0 || ddist < 6) {
+        this.dash_state = "idle";
+        this.tackle_cooldown = Math.floor(p.tackleCooldownMax * 0.6);
+      }
+      return true;
+    }
+    if (this.tackle_cooldown > 0) { this.tackle_cooldown -= 1; return false; }
+    if (this.pattern_timer % 6 === 0) {
+      this.dash_state = "dashing";
+      this.dash_target_x = target.x; this.dash_target_y = target.y;
+      const dx = target.x - this.x, dy = target.y - this.y;
+      const dist = Math.sqrt(dx*dx + dy*dy) || 1;
+      this.dash_timer = Math.min(120, Math.ceil(dist / p.dashSpeed) + 15);
+      for (let i = 0; i < 15; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y, DDD_GLOW, randUniform(3, 6), angle, 16));
+      }
+      return true;
+    }
+    return false;
+  }
+  phase1_darkdedede(target, bullets, particles) {
+    if (this.darkDededeTackle(target, bullets, particles, { dashSpeed: 14, tackleDamage: 8, tackleCooldownMax: 220 })) return;
+    if (this.pattern_timer % 50 === 0) {
+      for (let i = -5; i <= 5; i++) {
+        const angle = (180 + i * 8) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*5.5, Math.sin(angle)*5.5, DDD_PURPLE, 10, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 130 === 0 && this.big_hammer_cooldown === 0) {
+      for (let i = 0; i < 24; i++) {
+        const angle = (i * 15) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y + 30, Math.cos(angle)*5, Math.sin(angle)*5, DDD_RED, 10, 1, false, this.team));
+      }
+      this.big_hammer_cooldown = 70;
+      for (let i = 0; i < 20; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y + 30, DDD_RED, randUniform(3, 7), angle, 22));
+      }
+    }
+  }
+  phase2_darkdedede(target, bullets, particles) {
+    if (this.darkDededeTackle(target, bullets, particles, { dashSpeed: 17, tackleDamage: 10, tackleCooldownMax: 170 })) return;
+    if (this.pattern_timer % 38 === 0) {
+      for (let i = 0; i < 18; i++) {
+        const angle = (i * 20 + this.pattern_timer * 2) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*5.5, Math.sin(angle)*5.5, DDD_PURPLE, 9, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 85 === 0) {
+      bullets.push(new HomingBullet(this.x, this.y, 5, DDD_GLOW, 15, 1, target, this.team));
+      bullets.push(new HomingBullet(this.x, this.y, 5, DDD_GLOW, 15, 1, target, this.team));
+    }
+    if (this.pattern_timer % 120 === 0 && this.big_hammer_cooldown === 0) {
+      for (let i = 0; i < 28; i++) {
+        const angle = (i * (360 / 28)) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y + 30, Math.cos(angle)*5.5, Math.sin(angle)*5.5, DDD_RED, 10, 1, false, this.team));
+      }
+      this.big_hammer_cooldown = 65;
+    }
+  }
+  phase3_darkdedede(target, bullets, particles) {
+    if (this.darkDededeTackle(target, bullets, particles, { dashSpeed: 20, tackleDamage: 13, tackleCooldownMax: 130 })) return;
+    if (this.pattern_timer % 24 === 0) {
+      for (let i = 0; i < 26; i++) {
+        const angle = (i * (360 / 26) + this.pattern_timer * 3) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y, Math.cos(angle)*6, Math.sin(angle)*6, DDD_PURPLE, 10, 1, false, this.team));
+      }
+    }
+    if (this.pattern_timer % 65 === 0) {
+      for (let i = 0; i < 3; i++) bullets.push(new HomingBullet(this.x, this.y, 6, DDD_GLOW, 15, 1, target, this.team));
+    }
+    if (this.pattern_timer % 100 === 0 && this.big_hammer_cooldown === 0) {
+      for (let i = 0; i < 32; i++) {
+        const angle = (i * (360 / 32)) * Math.PI / 180;
+        bullets.push(new Bullet(this.x, this.y + 30, Math.cos(angle)*6, Math.sin(angle)*6, DDD_RED, 11, 1, false, this.team));
+      }
+      this.big_hammer_cooldown = 55;
+      for (let i = 0; i < 25; i++) {
+        const angle = randUniform(0, Math.PI * 2);
+        particles.push(new Particle(this.x, this.y + 30, DDD_RED, randUniform(3, 8), angle, 24));
+      }
+    }
+    if (this.pattern_timer % 210 === 0) {
+      for (let x = 0; x < WIDTH; x += 65) {
+        bullets.push(new Bullet(x, -20, 0, 7, DDD_PURPLE, 15, 1, false, this.team));
+      }
+    }
+  }
+
   take_damage(damage, particles) {
     if (this.invincible === 0) {
       // heavily resistant while flashing through a phase transition —
@@ -1322,6 +1862,10 @@ class Boss {
     else if (this.type === "dedede") this.draw_dedede(shake, ticks);
     else if (this.type === "zangief") this.draw_zangief(shake, ticks);
     else if (this.type === "liwancha") this.draw_liwancha(shake, ticks);
+    else if (this.type === "taranza") this.draw_taranza(shake, ticks);
+    else if (this.type === "sectonia") this.draw_sectonia(shake, ticks);
+    else if (this.type === "darkmeta") this.draw_darkmeta(shake, ticks);
+    else if (this.type === "darkdedede") this.draw_darkdedede(shake, ticks);
     else this.draw_magolor(shake, ticks);
 
     if (this.phase_transition) {
@@ -1656,6 +2200,201 @@ class Boss {
       ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
     }
   }
+  draw_taranza(shake, ticks) {
+    // original spider-puppeteer silhouette: round abdomen, small head, thin
+    // canvas-line legs — simple geometric shapes, not a likeness of any
+    // specific character art
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const bodyColor = this.flash > 0 ? WHITE : TARANZA_DARK;
+    const size = 48 + Math.sin(ticks * 0.003) * 4;
+
+    for (let i = 0; i < 8; i++) {
+      const angle = (i * 45 + Math.sin(ticks * 0.002 + i) * 8) * Math.PI / 180;
+      const kx = x + Math.cos(angle) * size * 0.8, ky = y + Math.sin(angle) * size * 0.8;
+      const lx = x + Math.cos(angle) * (size + 35), ly = y + Math.sin(angle) * (size + 35);
+      ctx.strokeStyle = rgb(TARANZA_PURPLE);
+      ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(kx, ky); ctx.lineTo(lx, ly); ctx.stroke();
+    }
+
+    ctx.fillStyle = rgb(bodyColor);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(TARANZA_PURPLE); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = rgb(TARANZA_PINK);
+    ctx.beginPath(); ctx.arc(x, y - size * 0.9, size * 0.45, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = rgb(TARANZA_EYE);
+    ctx.beginPath(); ctx.arc(x - 10, y - size * 0.9, 6, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 10, y - size * 0.9, 6, 0, Math.PI * 2); ctx.fill();
+
+    ctx.strokeStyle = rgb(TARANZA_WEB); ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(x - 14, y - size * 1.25);
+    ctx.lineTo(x - 4, y - size * 1.4);
+    ctx.lineTo(x, y - size * 1.2);
+    ctx.lineTo(x + 4, y - size * 1.4);
+    ctx.lineTo(x + 14, y - size * 1.25);
+    ctx.stroke();
+  }
+  draw_sectonia(shake, ticks) {
+    // draw mirror decoys first (behind, translucent), the real queen on top
+    for (const d of this.sect_decoys) {
+      this.drawSectoniaBody(d.x + shake[0], d.y + shake[1], ticks, 0.4, false);
+    }
+    this.drawSectoniaBody(this.x + shake[0], this.y + shake[1], ticks, 1, this.phase === 3);
+  }
+  drawSectoniaBody(x, y, ticks, alpha, ornate) {
+    const bodyColor = this.flash > 0 ? WHITE : SECTONIA_PURPLE;
+    const size = 52 + Math.sin(ticks * 0.003) * 4;
+
+    for (const side of [-1, 1]) {
+      const flap = Math.sin(ticks * 0.008) * 12;
+      ctx.fillStyle = rgb(SECTONIA_WING, 0.75 * alpha);
+      ctx.beginPath();
+      ctx.moveTo(x + side * size * 0.5, y - 10);
+      ctx.lineTo(x + side * (size + (ornate ? 60 : 45)), y - 40 + flap);
+      ctx.lineTo(x + side * (size + 20), y + flap * 0.5);
+      ctx.lineTo(x + side * (size + (ornate ? 55 : 38)), y + 40 + flap);
+      ctx.lineTo(x + side * size * 0.5, y + 15);
+      ctx.closePath(); ctx.fill();
+    }
+
+    ctx.fillStyle = rgb(bodyColor, alpha);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(SECTONIA_GOLD, alpha); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = rgb(SECTONIA_GOLD, alpha);
+    ctx.beginPath();
+    ctx.moveTo(x - 24, y - size - 5);
+    ctx.lineTo(x - 14, y - size - 28);
+    ctx.lineTo(x - 4, y - size - 8);
+    ctx.lineTo(x, y - size - 32);
+    ctx.lineTo(x + 4, y - size - 8);
+    ctx.lineTo(x + 14, y - size - 28);
+    ctx.lineTo(x + 24, y - size - 5);
+    ctx.closePath(); ctx.fill();
+
+    if (ornate) {
+      // extra monstrous spikes for the phase-3 "final form" look
+      ctx.strokeStyle = rgb(SECTONIA_MAGENTA, alpha); ctx.lineWidth = 3;
+      for (let i = 0; i < 5; i++) {
+        const a = (-60 + i * 30) * Math.PI / 180;
+        ctx.beginPath();
+        ctx.moveTo(x, y - size * 0.3);
+        ctx.lineTo(x + Math.cos(a) * size * 1.3, y - size * 0.3 + Math.sin(a) * size * 1.3 - 30);
+        ctx.stroke();
+      }
+    }
+
+    ctx.fillStyle = rgb(WHITE, alpha);
+    ctx.beginPath(); ctx.arc(x - 16, y - 6, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 16, y - 6, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgb(SECTONIA_MAGENTA, alpha);
+    ctx.beginPath(); ctx.arc(x - 16, y - 6, 5, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 16, y - 6, 5, 0, Math.PI * 2); ctx.fill();
+  }
+  draw_darkmeta(shake, ticks) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const bodyColor = this.flash > 0 ? WHITE : DMK_BLUE;
+    const size = 46 + Math.sin(ticks * 0.004) * 3;
+    const dashing = this.dmk_state === "dashing";
+
+    if (dashing) {
+      const ang = Math.atan2(this.dmk_dash_target_y - y, this.dmk_dash_target_x - x);
+      for (let i = 1; i <= 3; i++) {
+        ctx.fillStyle = rgb(DMK_PURPLE, 0.18 * (4 - i));
+        ctx.beginPath();
+        ctx.arc(x - Math.cos(ang) * i * 20, y - Math.sin(ang) * i * 20, size * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
+    ctx.fillStyle = rgb(DMK_PURPLE);
+    ctx.beginPath();
+    ctx.moveTo(x - size * 0.7, y + size * 0.3);
+    ctx.lineTo(x - size * 1.3, y + size * 1.5);
+    ctx.lineTo(x, y + size * 0.8);
+    ctx.lineTo(x + size * 1.3, y + size * 1.5);
+    ctx.lineTo(x + size * 0.7, y + size * 0.3);
+    ctx.closePath(); ctx.fill();
+
+    ctx.fillStyle = rgb(bodyColor);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(DMK_SILVER); ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = rgb(DMK_MASK);
+    ctx.beginPath(); ctx.ellipse(x, y - 4, size * 0.75, size * 0.55, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(DMK_SILVER); ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.ellipse(x, y - 4, size * 0.75, size * 0.55, 0, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.strokeStyle = rgb(DMK_GLOW); ctx.lineWidth = 4; ctx.lineCap = "round";
+    ctx.beginPath(); ctx.moveTo(x - 18, y - 6); ctx.lineTo(x - 4, y - 10); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(x + 18, y - 6); ctx.lineTo(x + 4, y - 10); ctx.stroke();
+    ctx.lineCap = "butt";
+
+    ctx.save();
+    ctx.translate(x + size + 10, y);
+    ctx.rotate(Math.sin(ticks * 0.01) * 0.2);
+    ctx.fillStyle = rgb(DMK_SILVER);
+    ctx.fillRect(-3, -30, 6, 45);
+    ctx.fillStyle = rgb(DMK_MASK);
+    ctx.fillRect(-10, 12, 20, 8);
+    ctx.restore();
+  }
+  draw_darkdedede(shake, ticks) {
+    const x = this.x + shake[0], y = this.y + shake[1];
+    const bodyColor = this.flash > 0 ? WHITE : DDD_BLUE;
+    const size = 64 + Math.sin(ticks * 0.0025) * 4;
+    const dashing = this.dash_state === "dashing";
+
+    if (dashing) {
+      ctx.strokeStyle = rgb(DDD_GLOW, 0.5 + 0.4 * Math.sin(ticks * 0.04));
+      ctx.lineWidth = 6;
+      ctx.beginPath(); ctx.arc(x, y, size + 24, 0, Math.PI * 2); ctx.stroke();
+    }
+
+    ctx.fillStyle = rgb(bodyColor);
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = rgb(DDD_BLACK); ctx.lineWidth = 4;
+    ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.stroke();
+
+    ctx.fillStyle = rgb(DDD_PURPLE);
+    ctx.beginPath(); ctx.ellipse(x, y + size * 0.42, size * 0.5, size * 0.4, 0, 0, Math.PI * 2); ctx.fill();
+
+    ctx.fillStyle = rgb(DDD_RED);
+    ctx.beginPath();
+    ctx.moveTo(x - 26, y - size - 5);
+    ctx.lineTo(x - 12, y - size - 30);
+    ctx.lineTo(x, y - size - 5);
+    ctx.lineTo(x + 12, y - size - 30);
+    ctx.lineTo(x + 26, y - size - 5);
+    ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = rgb(DDD_GLOW); ctx.lineWidth = 2; ctx.stroke();
+
+    ctx.fillStyle = rgb(DDD_GLOW);
+    ctx.beginPath(); ctx.arc(x - 20, y - size * 0.35, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 20, y - size * 0.35, 11, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = rgb(BLACK);
+    ctx.beginPath(); ctx.arc(x - 20, y - size * 0.35, 4, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(x + 20, y - size * 0.35, 4, 0, Math.PI * 2); ctx.fill();
+
+    const hammerAngle = Math.sin(ticks * 0.003) * 0.3;
+    const hx = x - size - 28, hy = y + Math.sin(ticks * 0.003) * 10;
+    ctx.save();
+    ctx.translate(hx, hy);
+    ctx.rotate(hammerAngle);
+    ctx.fillStyle = "rgb(40,20,50)";
+    ctx.fillRect(-4, -32, 8, 64);
+    ctx.fillStyle = rgb(DDD_RED);
+    ctx.fillRect(-24, -32, 48, 28);
+    ctx.strokeStyle = rgb(DDD_GLOW); ctx.lineWidth = 3;
+    ctx.strokeRect(-24, -32, 48, 28);
+    ctx.restore();
+  }
 }
 
 // ---------- Effect ----------
@@ -1743,11 +2482,29 @@ const UI = {
     ctx.fillRect(x, y, cw, bh);
     ctx.strokeStyle = rgb(WHITE); ctx.lineWidth = 2;
     ctx.strokeRect(x, y, bw, bh);
+  },
+  draw_focus(player) {
+    // small recharge bar for the Shift focus/dodge cooldown, placed just
+    // below the charge-shot bar in the same visual style
+    const x = 30, y = HEIGHT - 122, bw = 200, bh = 10;
+    ctx.fillStyle = "rgb(50,50,50)";
+    ctx.fillRect(x, y, bw, bh);
+    const ready = player.focus_cooldown === 0;
+    const ratio = ready ? 1 : 1 - (player.focus_cooldown / player.focus_cooldown_max);
+    const w = Math.floor(ratio * bw);
+    ctx.fillStyle = ready ? rgb(CYAN) : rgb(PURPLE);
+    ctx.fillRect(x, y, w, bh);
+    ctx.strokeStyle = rgb(WHITE); ctx.lineWidth = 1.5;
+    ctx.strokeRect(x, y, bw, bh);
+    ctx.fillStyle = rgb(WHITE);
+    ctx.font = "11px sans-serif";
+    ctx.textAlign = "left"; ctx.textBaseline = "alphabetic";
+    ctx.fillText(ready ? "포커스 준비" : "포커스 재사용대기", x, y - 3);
   }
 };
 
 // ---------- Game ----------
-const BOSS_ORDER = ["magolor", "marx", "dedede", "zangief", "liwancha"];
+const BOSS_ORDER = ["magolor", "marx", "dedede", "zangief", "liwancha", "taranza", "sectonia", "darkmeta", "darkdedede"];
 const MAX_PICKS_PER_BOSS = 5;
 
 class Game {
@@ -1882,6 +2639,7 @@ class Game {
           if (!this.spectatorMode && rectsOverlap(playerRect, br)) {
             if (this.player.take_damage(this.particles, bullet.damage || 1)) {
               this.add_shake(15);
+              if (bullet.snare) this.player.snared = Math.max(this.player.snared, bullet.snare);
             }
             this.bullets.splice(i, 1);
             hit = true;
@@ -2076,6 +2834,7 @@ class Game {
         else UI.draw_boss_health(boss, rightRow++, "right");
       }
       if (!this.spectatorMode) UI.draw_charge(this.player);
+      if (!this.spectatorMode) UI.draw_focus(this.player);
     } else if (this.state === "victory") {
       if (!this.spectatorMode) this.player.draw(this.shake_offset);
       for (const pt of this.particles) pt.draw(this.shake_offset);
