@@ -100,6 +100,44 @@
   }
   #overlay-msg.show { opacity: 1; }
 
+  #speed-controls {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    z-index: 3;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    background: rgba(10, 5, 24, 0.55);
+    padding: 5px 8px;
+    border-radius: 999px;
+    pointer-events: auto;
+  }
+  #speed-controls .speed-label {
+    font-size: 11px;
+    color: #cfc6e6;
+    margin-right: 2px;
+    user-select: none;
+  }
+  .speed-btn {
+    min-width: 30px;
+    padding: 4px 8px;
+    border-radius: 999px;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: inherit;
+    border: 1px solid rgba(255,255,255,0.3);
+    cursor: pointer;
+    background: rgba(255,255,255,0.08);
+    color: var(--text);
+  }
+  .speed-btn:hover { border-color: var(--accent); }
+  .speed-btn.active {
+    border-color: #4ade80;
+    background: rgba(74, 222, 128, 0.25);
+    color: #4ade80;
+  }
+
   #boss-select {
     position: absolute;
     inset: 0;
@@ -356,6 +394,14 @@
     <div id="spectator-row"><label><input type="checkbox" id="spectator-checkbox"> 관전 모드 (플레이어 없이 보스끼리 대결 관전)</label></div>
     <div class="hint">카드를 클릭/터치할 때마다 같은 보스를 최대 5명까지 반복 선택할 수 있어요(예: 마르크 5명) · <span class="key">−</span> 버튼이나 우클릭/Shift+클릭으로 한 명 빼기 · 방향키로 커서 이동, <span class="key">Z</span>로 한 명 추가, <span class="key">C</span>로 한 명 빼기, <span class="key">Shift</span>로 해당 보스의 팀 전환(적/아군, 이미 선택된 모든 인원에 적용), <span class="key">X</span>로 전투 시작</div>
   </div>
+  <div id="speed-controls">
+    <span class="speed-label">배속</span>
+    <button type="button" class="speed-btn" data-speed="0.5">x0.5</button>
+    <button type="button" class="speed-btn" data-speed="1">x1</button>
+    <button type="button" class="speed-btn" data-speed="2">x2</button>
+    <button type="button" class="speed-btn" data-speed="3">x3</button>
+    <button type="button" class="speed-btn" data-speed="5">x5</button>
+  </div>
 </div>
 <div id="controls">
   <b>이동</b> <span class="key">방향키</span> / <span class="key">WASD</span> &nbsp;·&nbsp;
@@ -372,6 +418,9 @@
 const WIDTH = 1280, HEIGHT = 720;
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
+// currently-selected game speed multiplier (1/2/3/5), set by the speed
+// buttons; read by new Game() so it survives victory/game_over resets
+let savedSpeedMultiplier = 1;
 
 // ---------- colors ----------
 const WHITE = [255,255,255];
@@ -430,7 +479,21 @@ function rgb(c, a) {
     if (c._rgb === undefined) c._rgb = `rgb(${c[0]},${c[1]},${c[2]})`;
     return c._rgb;
   }
-  return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+  // newer boss draw code (sectonia/taranza/liwancha/darkmeta/darkdedede)
+  // calls rgb(color, alpha) heavily every frame for glow/translucency —
+  // often with alpha that only takes a small set of distinct values (fixed
+  // constants like 0.4/0.7/0.9, or a slow sin() pulse that repeats). Round
+  // to 2 decimals and cache per color array, same trick as the plain-rgb
+  // cache above, bounded to ~100 entries per color so it can never grow
+  // unbounded even under a continuously varying alpha.
+  const key = Math.round(a * 100);
+  if (c._rgba === undefined) c._rgba = new Map();
+  let cached = c._rgba.get(key);
+  if (cached === undefined) {
+    cached = `rgba(${c[0]},${c[1]},${c[2]},${key / 100})`;
+    if (c._rgba.size < 128) c._rgba.set(key, cached);
+  }
+  return cached;
 }
 function lighten(c, amt) {
   return [Math.min(255, c[0]+amt), Math.min(255, c[1]+amt), Math.min(255, c[2]+amt)];
@@ -536,7 +599,6 @@ class HomingBullet extends Bullet {
     this.speed = speed;
     this.target = target;
     this.homing_strength = 0.07;
-    this.madetime = now();
   }
   update() {
     if (this.target) {
@@ -551,8 +613,14 @@ class HomingBullet extends Bullet {
     }
     this.x += this.vx; this.y += this.vy;
     this.lifetime += 1;
+    // frame-counter-based expiry (was wall-clock performance.now() before) —
+    // this needs to stay tied to simulated frames, not real elapsed time, so
+    // it still behaves correctly when Game.update() is called several times
+    // per rendered frame under the speed multiplier (real time barely moves
+    // between those calls, but this.lifetime still advances once per call,
+    // same as every other frame-driven timer in this file). 3.75s * 60fps.
     return this.x >= 0 && this.x <= WIDTH + 100 && this.y >= 0 && this.y <= HEIGHT + 100
-      && (now() - this.madetime) <= 3.75;
+      && this.lifetime <= 225;
   }
 }
 
@@ -2551,26 +2619,33 @@ class Boss {
     ctx.stroke();
   }
   draw_sectonia(shake, ticks) {
-    // draw mirror decoys first (behind, translucent), the real queen on top
+    // draw mirror decoys first (behind, translucent), the real queen on top.
+    // Decoys use the cheaper "lite" body (fewer canvas calls) — with up to 3
+    // decoys per instance and several sectonia instances possible via
+    // duplicate-pick, the full ornate body (wings + crown + spike flourishes)
+    // for every decoy adds up to real per-frame paint cost for no real
+    // gameplay benefit, since decoys are already flat translucent silhouettes.
     for (const d of this.sect_decoys) {
-      this.drawSectoniaBody(d.x + shake[0], d.y + shake[1], ticks, 0.4, false);
+      this.drawSectoniaBody(d.x + shake[0], d.y + shake[1], ticks, 0.4, false, true);
     }
-    this.drawSectoniaBody(this.x + shake[0], this.y + shake[1], ticks, 1, this.phase === 3);
+    this.drawSectoniaBody(this.x + shake[0], this.y + shake[1], ticks, 1, this.phase === 3, false);
   }
-  drawSectoniaBody(x, y, ticks, alpha, ornate) {
+  drawSectoniaBody(x, y, ticks, alpha, ornate, lite) {
     const bodyColor = this.flash > 0 ? WHITE : SECTONIA_PURPLE;
     const size = 52 + Math.sin(ticks * 0.003) * 4;
 
-    for (const side of [-1, 1]) {
-      const flap = Math.sin(ticks * 0.008) * 12;
-      ctx.fillStyle = rgb(SECTONIA_WING, 0.75 * alpha);
-      ctx.beginPath();
-      ctx.moveTo(x + side * size * 0.5, y - 10);
-      ctx.lineTo(x + side * (size + (ornate ? 60 : 45)), y - 40 + flap);
-      ctx.lineTo(x + side * (size + 20), y + flap * 0.5);
-      ctx.lineTo(x + side * (size + (ornate ? 55 : 38)), y + 40 + flap);
-      ctx.lineTo(x + side * size * 0.5, y + 15);
-      ctx.closePath(); ctx.fill();
+    if (!lite) {
+      for (const side of [-1, 1]) {
+        const flap = Math.sin(ticks * 0.008) * 12;
+        ctx.fillStyle = rgb(SECTONIA_WING, 0.75 * alpha);
+        ctx.beginPath();
+        ctx.moveTo(x + side * size * 0.5, y - 10);
+        ctx.lineTo(x + side * (size + (ornate ? 60 : 45)), y - 40 + flap);
+        ctx.lineTo(x + side * (size + 20), y + flap * 0.5);
+        ctx.lineTo(x + side * (size + (ornate ? 55 : 38)), y + 40 + flap);
+        ctx.lineTo(x + side * size * 0.5, y + 15);
+        ctx.closePath(); ctx.fill();
+      }
     }
 
     ctx.fillStyle = rgb(bodyColor, alpha);
@@ -2578,35 +2653,46 @@ class Boss {
     ctx.strokeStyle = rgb(SECTONIA_GOLD, alpha); ctx.lineWidth = 4;
     ctx.beginPath(); ctx.arc(x, y, size, 0, Math.PI * 2); ctx.stroke();
 
-    ctx.fillStyle = rgb(SECTONIA_GOLD, alpha);
-    ctx.beginPath();
-    ctx.moveTo(x - 24, y - size - 5);
-    ctx.lineTo(x - 14, y - size - 28);
-    ctx.lineTo(x - 4, y - size - 8);
-    ctx.lineTo(x, y - size - 32);
-    ctx.lineTo(x + 4, y - size - 8);
-    ctx.lineTo(x + 14, y - size - 28);
-    ctx.lineTo(x + 24, y - size - 5);
-    ctx.closePath(); ctx.fill();
+    if (!lite) {
+      ctx.fillStyle = rgb(SECTONIA_GOLD, alpha);
+      ctx.beginPath();
+      ctx.moveTo(x - 24, y - size - 5);
+      ctx.lineTo(x - 14, y - size - 28);
+      ctx.lineTo(x - 4, y - size - 8);
+      ctx.lineTo(x, y - size - 32);
+      ctx.lineTo(x + 4, y - size - 8);
+      ctx.lineTo(x + 14, y - size - 28);
+      ctx.lineTo(x + 24, y - size - 5);
+      ctx.closePath(); ctx.fill();
 
-    if (ornate) {
-      // extra monstrous spikes for the phase-3 "final form" look
-      ctx.strokeStyle = rgb(SECTONIA_MAGENTA, alpha); ctx.lineWidth = 3;
-      for (let i = 0; i < 5; i++) {
-        const a = (-60 + i * 30) * Math.PI / 180;
-        ctx.beginPath();
-        ctx.moveTo(x, y - size * 0.3);
-        ctx.lineTo(x + Math.cos(a) * size * 1.3, y - size * 0.3 + Math.sin(a) * size * 1.3 - 30);
-        ctx.stroke();
+      if (ornate) {
+        // extra monstrous spikes for the phase-3 "final form" look
+        ctx.strokeStyle = rgb(SECTONIA_MAGENTA, alpha); ctx.lineWidth = 3;
+        for (let i = 0; i < 5; i++) {
+          const a = (-60 + i * 30) * Math.PI / 180;
+          ctx.beginPath();
+          ctx.moveTo(x, y - size * 0.3);
+          ctx.lineTo(x + Math.cos(a) * size * 1.3, y - size * 0.3 + Math.sin(a) * size * 1.3 - 30);
+          ctx.stroke();
+        }
       }
     }
 
-    ctx.fillStyle = rgb(WHITE, alpha);
-    ctx.beginPath(); ctx.arc(x - 16, y - 6, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 16, y - 6, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = rgb(SECTONIA_MAGENTA, alpha);
-    ctx.beginPath(); ctx.arc(x - 16, y - 6, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(x + 16, y - 6, 5, 0, Math.PI * 2); ctx.fill();
+    // eyes: decoys get a single flat dot per eye (2 calls) instead of the
+    // full white+pupil highlight (4 calls) — still reads as a face at a
+    // glance, which is all a background decoy needs.
+    if (lite) {
+      ctx.fillStyle = rgb(SECTONIA_MAGENTA, alpha);
+      ctx.beginPath(); ctx.arc(x - 16, y - 6, 6, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 16, y - 6, 6, 0, Math.PI * 2); ctx.fill();
+    } else {
+      ctx.fillStyle = rgb(WHITE, alpha);
+      ctx.beginPath(); ctx.arc(x - 16, y - 6, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 16, y - 6, 10, 0, Math.PI * 2); ctx.fill();
+      ctx.fillStyle = rgb(SECTONIA_MAGENTA, alpha);
+      ctx.beginPath(); ctx.arc(x - 16, y - 6, 5, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(x + 16, y - 6, 5, 0, Math.PI * 2); ctx.fill();
+    }
   }
   draw_darkmeta(shake, ticks) {
     const x = this.x + shake[0], y = this.y + shake[1];
@@ -2852,6 +2938,14 @@ class Game {
     this.shake_duration = 0;
 
     this.state = "select";
+    // Game speed multiplier (1/2/3/5). loop() calls update() this many times
+    // per rendered frame (see below) instead of scaling a dt value, so every
+    // frame-counter-driven timer/cooldown/animation tick in this file keeps
+    // working unmodified, just runs more simulated frames per real second.
+    // Read from the module-level var (set by the speed buttons) so a
+    // victory/game_over reset (Object.assign(this, new Game())) doesn't
+    // silently snap the speed back to x1 mid-session.
+    this.speedMultiplier = savedSpeedMultiplier;
     this.selectedIndex = 0;
     // how many instances of each boss index are queued up for the next fight
     // (index -> count, 0..MAX_PICKS_PER_BOSS). The same boss type can be picked
@@ -3338,6 +3432,36 @@ if (spectatorCheckbox) {
   });
 }
 
+// ---------- speed controls ----------
+const speedBtns = Array.from(document.querySelectorAll(".speed-btn"));
+// fractional speeds (x0.5) can't call update() a whole number of times every
+// rendered frame, so we accumulate the multiplier each frame and only run
+// update() once the accumulator has banked a full step (e.g. at x0.5, that's
+// once every other frame) - this keeps x0.5 truly half-speed rather than
+// rounding it up/down to x0 or x1.
+let speedAccumulator = 0;
+function setSpeed(mult) {
+  savedSpeedMultiplier = mult;
+  game.speedMultiplier = mult;
+  // a fractional multiplier (x0.5) can't run a whole update() every frame,
+  // so reset the fractional accumulator whenever the speed changes to avoid
+  // a stale leftover fraction causing an extra/missed step right after a switch
+  speedAccumulator = 0;
+  speedBtns.forEach(btn => {
+    btn.classList.toggle("active", parseFloat(btn.dataset.speed) === mult);
+  });
+}
+speedBtns.forEach(btn => {
+  // mousedown (not just click) with preventDefault keeps focus off the
+  // button so a still-held arrow key / WASD movement key isn't interrupted
+  // by focus moving to this button, same concern as the boss-select buttons
+  btn.addEventListener("mousedown", (e) => e.preventDefault());
+  btn.addEventListener("click", () => {
+    setSpeed(parseFloat(btn.dataset.speed));
+  });
+});
+setSpeed(1);
+
 let lastSyncedState = null;
 let lastSyncedIndex = -1;
 let lastSyncedPicked = "";
@@ -3398,7 +3522,34 @@ function syncBossSelectUI() {
 }
 
 function loop() {
-  game.update();
+  // Speed multiplier: run the simulation update() several times per
+  // rendered frame instead of once, then draw a single time. Every timer,
+  // cooldown and pattern_timer in this file is a plain per-call integer
+  // counter (not a real-time dt), so calling update() N times really does
+  // advance N simulated frames' worth of gameplay — movement, AI, bullets,
+  // cooldowns, all of it — genuinely N times faster, not just a visual
+  // speedup. draw() only runs once so rendering cost doesn't scale with speed.
+  // keep boss-select menu navigation at normal speed regardless of the
+  // battle speed setting — only the actual fight (and the intro/victory/
+  // game_over states around it) should run at the chosen multiplier.
+  const targetMult = game.state === "select" ? 1 : (game.speedMultiplier || 1);
+  let steps;
+  if (targetMult >= 1) {
+    // whole-number-or-more speeds (x1/x2/x3/x5): just run that many updates,
+    // same as before - no accumulator needed since there's no fraction to bank
+    steps = Math.round(targetMult);
+    speedAccumulator = 0;
+  } else {
+    // fractional speed (x0.5 and below): bank the multiplier each frame and
+    // only spend a whole update once enough has accumulated, so e.g. x0.5
+    // runs update() on every other rendered frame instead of every frame
+    speedAccumulator += targetMult;
+    steps = Math.floor(speedAccumulator);
+    speedAccumulator -= steps;
+  }
+  for (let i = 0; i < steps; i++) {
+    game.update();
+  }
   game.draw();
   syncBossSelectUI();
   requestAnimationFrame(loop);
