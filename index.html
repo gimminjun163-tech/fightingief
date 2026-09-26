@@ -392,7 +392,7 @@
     </div>
     <button id="start-battle-btn" disabled>전투 시작 (0명 선택됨)</button>
     <div id="spectator-row"><label><input type="checkbox" id="spectator-checkbox"> 관전 모드 (플레이어 없이 보스끼리 대결 관전)</label></div>
-    <div class="hint">카드를 클릭/터치할 때마다 같은 보스를 최대 5명까지 반복 선택할 수 있어요(예: 마르크 5명) · <span class="key">−</span> 버튼이나 우클릭/Shift+클릭으로 한 명 빼기 · 방향키로 커서 이동, <span class="key">Z</span>로 한 명 추가, <span class="key">C</span>로 한 명 빼기, <span class="key">Shift</span>로 해당 보스의 팀 전환(적/아군, 이미 선택된 모든 인원에 적용), <span class="key">X</span>로 전투 시작</div>
+    <div class="hint">카드를 클릭/터치할 때마다 같은 보스를 최대 10명까지 반복 선택할 수 있어요(예: 마르크 10명) · <span class="key">−</span> 버튼이나 우클릭/Shift+클릭으로 한 명 빼기 · 방향키로 커서 이동, <span class="key">Z</span>로 한 명 추가, <span class="key">C</span>로 한 명 빼기, <span class="key">Shift</span>로 해당 보스의 팀 전환(적/아군, 이미 선택된 모든 인원에 적용), <span class="key">X</span>로 전투 시작</div>
   </div>
   <div id="speed-controls">
     <span class="speed-label">배속</span>
@@ -2924,7 +2924,7 @@ const UI = {
 
 // ---------- Game ----------
 const BOSS_ORDER = ["magolor", "marx", "dedede", "zangief", "liwancha", "taranza", "sectonia", "darkmeta", "darkdedede"];
-const MAX_PICKS_PER_BOSS = 5;
+const MAX_PICKS_PER_BOSS = 10;
 
 class Game {
   constructor() {
