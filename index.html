@@ -308,6 +308,114 @@
     opacity: 0.35;
     cursor: not-allowed;
   }
+
+  /* ---------- touch controls (virtual joystick + action buttons) ---------- */
+  #touch-controls {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: none;
+    pointer-events: none;
+  }
+  #touch-controls.show { display: block; }
+  #joystick-zone {
+    position: absolute;
+    left: 4%;
+    bottom: 4%;
+    width: 130px;
+    height: 130px;
+    pointer-events: auto;
+    touch-action: none;
+  }
+  #joystick-base {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    border: 2px solid rgba(255,255,255,0.28);
+  }
+  #joystick-thumb {
+    position: absolute;
+    width: 56px; height: 56px;
+    left: 37px; top: 37px;
+    border-radius: 50%;
+    background: rgba(147,112,219,0.55);
+    border: 2px solid rgba(255,255,255,0.5);
+  }
+  #touch-actions {
+    position: absolute;
+    right: 3%;
+    bottom: 4%;
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    pointer-events: none;
+  }
+  .touch-btn {
+    pointer-events: auto;
+    touch-action: none;
+    width: 68px; height: 68px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.4);
+    background: rgba(147,112,219,0.32);
+    color: #fff;
+    font-size: 12px;
+    font-weight: 700;
+    font-family: inherit;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  .touch-btn.active-touch {
+    background: rgba(147,112,219,0.7);
+    border-color: #fff;
+  }
+  #btn-focus { width: 56px; height: 56px; font-size: 11px; margin-bottom: 8px; }
+
+  /* ---------- narrow phone-width tweaks: keep every tap target >= ~40px ---------- */
+  @media (max-width: 480px) {
+    .boss-card { width: 42%; min-width: 136px; padding: 12px 8px; }
+    .minus-btn, .team-toggle {
+      padding: 9px 14px;
+      font-size: 13px;
+      min-height: 38px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .speed-btn { min-width: 42px; padding: 9px 10px; font-size: 13px; }
+    #start-battle-btn { padding: 13px 26px; font-size: 15px; }
+    #spectator-row { font-size: 12px; text-align: center; }
+    #boss-select .cards { gap: 10px; }
+  }
+
+  /* On phones (and tablets in portrait), #canvas-wrap's 16:9 aspect-ratio
+     box gets too short to hold the boss-select overlay's content (header +
+     card grid + start button + hint all need well over 500px of height,
+     but e.g. a 390px-wide phone only gives ~220px of aspect-ratio height).
+     Pop the overlay out to cover the full viewport instead of being boxed
+     into the game canvas's shape, and let it scroll if still tall. */
+  @media (max-width: 900px) {
+    #boss-select {
+      position: fixed;
+      inset: 0;
+      overflow-y: auto;
+      justify-content: flex-start;
+      padding: 24px 0 32px;
+      border-radius: 0;
+    }
+    /* Same problem hits the touch controls: #canvas-wrap is only ~1/3 as
+       tall as it is wide on a portrait phone, so joystick/buttons anchored
+       inside it (bottom-left/right of a ~220px box) crowd right into the
+       speed-control pills. Anchor them to the real viewport bottom instead,
+       where there's always room below the (much shorter) scaled canvas. */
+    #touch-controls { position: fixed; }
+    #joystick-zone { left: 14px; bottom: max(14px, env(safe-area-inset-bottom)); }
+    #touch-actions { right: 12px; bottom: max(14px, env(safe-area-inset-bottom)); }
+  }
 </style>
 </head>
 <body>
@@ -401,6 +509,17 @@
     <button type="button" class="speed-btn" data-speed="2">x2</button>
     <button type="button" class="speed-btn" data-speed="3">x3</button>
     <button type="button" class="speed-btn" data-speed="5">x5</button>
+  </div>
+  <div id="touch-controls">
+    <div id="joystick-zone">
+      <div id="joystick-base"></div>
+      <div id="joystick-thumb"></div>
+    </div>
+    <div id="touch-actions">
+      <div class="touch-btn" id="btn-focus">포커스</div>
+      <div class="touch-btn" id="btn-charge">차지샷</div>
+      <div class="touch-btn" id="btn-attack">공격</div>
+    </div>
   </div>
 </div>
 <div id="controls">
@@ -3462,6 +3581,107 @@ speedBtns.forEach(btn => {
 });
 setSpeed(1);
 
+// ---------- touch controls (virtual joystick + action buttons) ----------
+// Feeds the exact same `keys` object/field names the keyboard handlers use
+// (keys.left/right/up/down/z/x/shift), so Player.update()/Game.update() need
+// no changes at all — this is purely a second input source.
+const isTouchDevice = ("ontouchstart" in window) || navigator.maxTouchPoints > 0;
+const touchControlsEl = document.getElementById("touch-controls");
+if (isTouchDevice) {
+  const joystickZone = document.getElementById("joystick-zone");
+  const joystickThumb = document.getElementById("joystick-thumb");
+  const btnAttack = document.getElementById("btn-attack");
+  const btnCharge = document.getElementById("btn-charge");
+  const btnFocus = document.getElementById("btn-focus");
+
+  let joystickTouchId = null;
+  let joystickCenterX = 0, joystickCenterY = 0;
+  const JOY_RADIUS = 65;
+  const JOY_DEADZONE = 14;
+
+  function resetJoystick() {
+    keys.left = keys.right = keys.up = keys.down = false;
+    joystickThumb.style.left = "37px";
+    joystickThumb.style.top = "37px";
+  }
+
+  function handleJoystickMove(touch) {
+    const dx = touch.clientX - joystickCenterX;
+    const dy = touch.clientY - joystickCenterY;
+    const dist = Math.hypot(dx, dy);
+    const clamped = Math.min(dist, JOY_RADIUS);
+    const angle = Math.atan2(dy, dx);
+    joystickThumb.style.left = (37 + Math.cos(angle) * clamped) + "px";
+    joystickThumb.style.top = (37 + Math.sin(angle) * clamped) + "px";
+    const active = dist > JOY_DEADZONE;
+    keys.left = active && Math.cos(angle) < -0.3;
+    keys.right = active && Math.cos(angle) > 0.3;
+    keys.up = active && Math.sin(angle) < -0.3;
+    keys.down = active && Math.sin(angle) > 0.3;
+  }
+
+  joystickZone.addEventListener("touchstart", (e) => {
+    e.preventDefault();
+    if (joystickTouchId !== null) return;
+    const touch = e.changedTouches[0];
+    joystickTouchId = touch.identifier;
+    const rect = joystickZone.getBoundingClientRect();
+    joystickCenterX = rect.left + rect.width / 2;
+    joystickCenterY = rect.top + rect.height / 2;
+    handleJoystickMove(touch);
+  }, { passive: false });
+
+  joystickZone.addEventListener("touchmove", (e) => {
+    e.preventDefault();
+    for (const touch of e.changedTouches) {
+      if (touch.identifier === joystickTouchId) { handleJoystickMove(touch); break; }
+    }
+  }, { passive: false });
+
+  function endJoystickTouch(e) {
+    for (const touch of e.changedTouches) {
+      if (touch.identifier === joystickTouchId) { joystickTouchId = null; resetJoystick(); break; }
+    }
+  }
+  joystickZone.addEventListener("touchend", (e) => { e.preventDefault(); endJoystickTouch(e); }, { passive: false });
+  joystickZone.addEventListener("touchcancel", (e) => { e.preventDefault(); endJoystickTouch(e); }, { passive: false });
+
+  // Action buttons: each tracks its own set of touch identifiers so multiple
+  // fingers (e.g. joystick + attack at once, or two action buttons at once)
+  // work independently instead of fighting over one global touch point.
+  function wireActionButton(el, keyName) {
+    const activeIds = new Set();
+    function setKey(v) { keys[keyName] = v; el.classList.toggle("active-touch", v); }
+    el.addEventListener("touchstart", (e) => {
+      e.preventDefault();
+      for (const touch of e.changedTouches) activeIds.add(touch.identifier);
+      setKey(true);
+    }, { passive: false });
+    function release(e) {
+      e.preventDefault();
+      for (const touch of e.changedTouches) activeIds.delete(touch.identifier);
+      if (activeIds.size === 0) setKey(false);
+    }
+    el.addEventListener("touchend", release, { passive: false });
+    el.addEventListener("touchcancel", release, { passive: false });
+  }
+  wireActionButton(btnAttack, "z");
+  wireActionButton(btnCharge, "x");
+  wireActionButton(btnFocus, "shift");
+}
+
+// show/hide the overlay to match game state (only during playing/intro),
+// and only on touch-capable devices so a desktop mouse/keyboard user never
+// sees it at all.
+let lastTouchControlsShown = null;
+function syncTouchControls() {
+  const shouldShow = isTouchDevice && (game.state === "playing" || game.state === "intro");
+  if (shouldShow !== lastTouchControlsShown) {
+    touchControlsEl.classList.toggle("show", shouldShow);
+    lastTouchControlsShown = shouldShow;
+  }
+}
+
 let lastSyncedState = null;
 let lastSyncedIndex = -1;
 let lastSyncedPicked = "";
@@ -3552,6 +3772,7 @@ function loop() {
   }
   game.draw();
   syncBossSelectUI();
+  syncTouchControls();
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
